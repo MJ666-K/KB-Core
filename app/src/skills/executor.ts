@@ -1,5 +1,7 @@
 import type { SkillContext, SkillResult } from './types';
 import type { FunctionDefinition, Message } from '../llm/llm-service';
+import type { RetrievalResult } from '../retrieve/retriever';
+import { formatCitations, deduplicateChunks } from './types';
 import { logger } from '../utils/logger';
 
 const MAX_SKILL_ITERATIONS = 3;
@@ -33,6 +35,7 @@ export class SkillExecutor {
     ];
 
     const allToolCalls: SkillResult['toolCalls'] = [];
+    const allRetrievalResults: RetrievalResult[] = [];
 
     for (let iter = 0; iter < MAX_SKILL_ITERATIONS; iter++) {
       const response = await ctx.llm.chat({
@@ -44,7 +47,8 @@ export class SkillExecutor {
 
       if (!response.tool_calls?.length) {
         logger.debug(`[SkillExecutor] done in ${iter + 1} iteration(s)`);
-        return { answer: response.content ?? '', citations: [], toolCalls: allToolCalls };
+        const deduped = deduplicateChunks(allRetrievalResults);
+        return { answer: response.content ?? '', citations: formatCitations(deduped), toolCalls: allToolCalls };
       }
 
       messages.push({ role: 'assistant', content: response.content ?? '', tool_calls: response.tool_calls });
@@ -55,6 +59,11 @@ export class SkillExecutor {
 
         const result = await ctx.executeTool(call.function.name, params);
         allToolCalls.push({ name: call.function.name, kind: 'tool', params });
+
+        // 检查是否是 RetrievalResult[]，如果是则收集用于生成 citations
+        if (this.isRetrievalResultArray(result)) {
+          allRetrievalResults.push(...result);
+        }
 
         const content = JSON.stringify(result);
         messages.push({
@@ -68,7 +77,17 @@ export class SkillExecutor {
     const final = await ctx.llm.chat({
       messages: [...messages, { role: 'user', content: '请基于以上信息给出最终回答。' }],
     });
-    return { answer: final.content ?? '', citations: [], toolCalls: allToolCalls };
+    const deduped = deduplicateChunks(allRetrievalResults);
+    return { answer: final.content ?? '', citations: formatCitations(deduped), toolCalls: allToolCalls };
+  }
+
+  private isRetrievalResultArray(result: unknown): result is RetrievalResult[] {
+    if (!Array.isArray(result)) return false;
+    if (result.length === 0) return false;
+    const first = result[0];
+    return typeof first === 'object' && first !== null &&
+      'chunkId' in first && 'text' in first && 'score' in first &&
+      'documentId' in first && 'documentTitle' in first;
   }
 
   private filterToolDefs(tools: SkillContext['tools'], allowed: readonly string[]): FunctionDefinition[] {
