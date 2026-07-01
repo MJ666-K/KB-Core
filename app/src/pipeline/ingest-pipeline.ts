@@ -69,16 +69,20 @@ export async function ingestDocument(docId: string, sourcePath: string, datasetI
     const texts = childUnits.map(u => u.text);
     const embeddings = await embeddingService.embedBatch(texts);
 
-    await db.execute(sql`
-      UPDATE chunks SET embedding = data.embedding, embedding_status = 'done'
-      FROM (
-        SELECT * FROM UNNEST(
-          ${sql.raw(`ARRAY[${childIds.map(id => `'${id}'`).join(',')}]::uuid[]`)} AS id,
-          ${sql.raw(`ARRAY[${embeddings.map(e => `'[${e.join(',')}]'`).join(',')}::vector[]`)} AS embedding
-        )
-      ) AS data
-      WHERE chunks.id = data.id
-    `);
+    // 批量 UPDATE embeddings（分批避免 SQL 过长）
+    const UPDATE_BATCH = 25;
+    for (let batch = 0; batch < childIds.length; batch += UPDATE_BATCH) {
+      const sliceEnd = Math.min(batch + UPDATE_BATCH, childIds.length);
+      const valuesParts: string[] = [];
+      for (let i = batch; i < sliceEnd; i++) {
+        valuesParts.push(`('${childIds[i]}'::uuid, '[${embeddings[i]!.join(',')}]'::vector)`);
+      }
+      await db.execute(sql`
+        UPDATE chunks SET embedding = v.embedding, embedding_status = 'done'
+        FROM (VALUES ${sql.raw(valuesParts.join(', '))}) AS v(id, embedding)
+        WHERE chunks.id = v.id
+      `);
+    }
 
     await recordJob(docId, 'embed', 'done', { embedded: childIds.length });
     await updateDocStatus(docId, 'ready');

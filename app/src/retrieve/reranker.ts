@@ -22,6 +22,7 @@ export class ApiReranker implements Reranker {
 
     try {
       const documents = candidates.map(c => c.text.slice(0, this.maxDocChars));
+
       const res = await fetch(config.rerankApiUrl, {
         method: 'POST',
         headers: {
@@ -30,19 +31,30 @@ export class ApiReranker implements Reranker {
         },
         body: JSON.stringify({
           model: config.rerankModelId,
-          query,
-          documents,
-          top_n: limit,
+          input: {
+            query,
+            documents,
+          },
+          parameters: {
+            top_n: limit,
+            return_documents: false,
+          },
         }),
       });
 
       if (!res.ok) throw new Error(`Rerank API ${res.status}: ${await res.text()}`);
 
       const json = await res.json() as {
-        results: Array<{ index: number; relevance_score: number }>;
+        output?: {
+          results?: Array<{ index: number; relevance_score: number }>;
+        };
+        results?: Array<{ index: number; relevance_score: number }>;
       };
 
-      return json.results.map(r => ({ ...candidates[r.index]!, score: r.relevance_score }));
+      const results = json.output?.results ?? json.results ?? [];
+      if (results.length === 0) return candidates.slice(0, limit);
+
+      return results.map(r => ({ ...candidates[r.index]!, score: r.relevance_score }));
     } catch (err) {
       logger.warn('Rerank failed, falling back to original order', err);
       return candidates.slice(0, limit);

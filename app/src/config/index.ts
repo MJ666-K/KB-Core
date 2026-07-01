@@ -15,7 +15,7 @@ const envSchema = z.object({
   embeddingApiKey: z.string().min(1, 'EMBEDDING_API_KEY is required'),
   embeddingModelId: z.string().default('text-embedding-v3'),
   embeddingDim: z.coerce.number().int().positive().default(1024),
-  embeddingBatchSize: z.coerce.number().int().positive().default(16),
+  embeddingBatchSize: z.coerce.number().int().positive().default(10),
 
   rerankApiUrl: z.string().url(),
   rerankApiKey: z.string().min(1, 'RERANK_API_KEY is required'),

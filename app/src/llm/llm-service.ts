@@ -36,6 +36,24 @@ export interface ChatOptions {
   maxTokens?: number;
 }
 
+const MAX_RETRIES = 3;
+
+async function fetchWithRetry(url: string, options: RequestInit, label: string): Promise<Response> {
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch(url, options);
+      return res;
+    } catch (err) {
+      const isLastAttempt = attempt === MAX_RETRIES;
+      const delay = Math.pow(2, attempt) * 1000;
+      if (isLastAttempt) throw err;
+      logger.warn(`[${label}] attempt ${attempt} failed, retrying in ${delay}ms: ${err}`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw new Error('unreachable');
+}
+
 export class LLMService {
   async chat(opts: ChatOptions): Promise<ChatResponse> {
     const url = `${config.llmApiUrl}/chat/completions`;
@@ -53,14 +71,14 @@ export class LLMService {
       body.max_tokens = opts.maxTokens;
     }
 
-    const res = await fetch(url, {
+    const res = await fetchWithRetry(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${config.llmApiKey}`,
       },
       body: JSON.stringify(body),
-    });
+    }, 'LLM');
 
     if (!res.ok) {
       const errorBody = await res.text();

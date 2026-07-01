@@ -31,7 +31,7 @@ export class EmbeddingService {
 
   private async callApi(texts: string[]): Promise<number[][]> {
     const url = `${config.embeddingApiUrl}/embeddings`;
-    const res = await fetch(url, {
+    const opts: RequestInit = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -41,9 +41,23 @@ export class EmbeddingService {
         model: config.embeddingModelId,
         input: texts,
       }),
-    });
+    };
 
-    if (!res.ok) {
+    let res: Response | null = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        res = await fetch(url, opts);
+        break;
+      } catch (err) {
+        if (attempt === 3) throw err;
+        const delay = Math.pow(2, attempt) * 1000;
+        logger.warn(`[Embedding] attempt ${attempt} failed, retry in ${delay}ms`);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+    if (!res) throw new Error('Embedding fetch failed after retries');
+
+    if (!res!.ok) {
       const errorBody = await res.text();
       logger.error('Embedding API error', { status: res.status, body: errorBody });
       throw new Error(`Embedding API error: ${res.status} ${errorBody}`);

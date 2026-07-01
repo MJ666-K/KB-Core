@@ -4,7 +4,7 @@ import { inArray } from 'drizzle-orm';
 import { denseSearch, type DenseHit } from './dense';
 import { sparseSearch } from './sparse';
 import { rrfFusion } from './rrf';
-import { ApiReranker, type RerankCandidate, type Reranker } from './reranker';
+import { ApiReranker, PassThroughReranker, type RerankCandidate, type Reranker } from './reranker';
 import { EmbeddingService } from '../embedding/embedding-service';
 import { config } from '../config';
 import { TTLCache } from '../cache/ttl-cache';

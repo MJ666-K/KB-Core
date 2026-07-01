@@ -2,6 +2,9 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { QueryAgent } from '../agent/query-agent';
 import type { Message } from '../llm/llm-service';
+import { db } from '../db/client';
+import { datasets } from '../db/schema';
+import { eq } from 'drizzle-orm';
 
 const app = new Hono();
 
@@ -20,6 +23,8 @@ const queryBodySchema = z.object({
   }).optional(),
 });
 
+let cachedDefaultDatasetId: string | null = null;
+
 app.post('/query', async (c) => {
   if (!agentInstance) return c.json({ error: 'Agent not initialized' }, 503);
   const rawBody = await c.req.json().catch(() => null);
@@ -28,9 +33,20 @@ app.post('/query', async (c) => {
   if (!parseResult.success) return c.json({ error: 'Invalid request body', detail: parseResult.error.issues }, 400);
   const body = parseResult.data;
   const history = body.options?.history as Message[] | undefined;
+
+  let datasetId = body.datasetId;
+  if (!datasetId) {
+    if (!cachedDefaultDatasetId) {
+      const ds = await db.query.datasets.findFirst({ where: eq(datasets.name, 'default') });
+      if (!ds) return c.json({ error: 'Default dataset not found' }, 500);
+      cachedDefaultDatasetId = ds.id;
+    }
+    datasetId = cachedDefaultDatasetId;
+  }
+
   try {
     const result = await agentInstance.execute(body.question, {
-      datasetId: body.datasetId ?? 'default', topK: body.options?.topK, maxIterations: body.options?.maxIterations, history,
+      datasetId, topK: body.options?.topK, maxIterations: body.options?.maxIterations, history,
     });
     return c.json(result);
   } catch (err) {

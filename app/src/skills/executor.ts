@@ -2,7 +2,7 @@ import type { SkillContext, SkillResult } from './types';
 import type { FunctionDefinition, Message } from '../llm/llm-service';
 import { logger } from '../utils/logger';
 
-const MAX_SKILL_ITERATIONS = 5;
+const MAX_SKILL_ITERATIONS = 3;
 
 /**
  * 通用 Skill 执行器。
