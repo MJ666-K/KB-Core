@@ -31,16 +31,8 @@ async function main() {
     process.stdout.write(`[${tc.id}] ${tc.q.slice(0, 25)}... `);
     const t0 = Date.now();
     try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 60000);
-      const res = await fetch(`${API}/query`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: tc.q }),
-        signal: ctrl.signal,
-      });
-      clearTimeout(timer);
-      const data = await res.json() as any;
+      const { wsQuery } = await import('./ws-query');
+      const data = await wsQuery(tc.q, 60000);
       const ms = Date.now() - t0;
       const ans = data.answer ?? '';
       const kw = new RegExp(tc.kw).test(ans);

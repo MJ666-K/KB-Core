@@ -1,9 +1,17 @@
 import type { Tool, ToolContext } from './types';
-import type { HybridRetriever, RetrievalResult } from '../retrieve/retriever';
+import type { HybridRetriever, RetrievalResult, RetrievalDetails } from '../retrieve/retriever';
 
 let retrieverInstance: HybridRetriever | null = null;
 
 export function setRetriever(r: HybridRetriever): void { retrieverInstance = r; }
+
+const detailsBuffer: RetrievalDetails[] = [];
+
+export function drainRetrievalDetails(): RetrievalDetails[] {
+  const out = [...detailsBuffer];
+  detailsBuffer.length = 0;
+  return out;
+}
 
 interface SearchParams { query: string; topK?: number; [key: string]: unknown; }
 
@@ -21,6 +29,8 @@ export const searchKnowledgeTool: Tool<SearchParams, RetrievalResult[]> = {
   async execute(params: SearchParams, ctx: ToolContext): Promise<RetrievalResult[]> {
     if (!retrieverInstance) throw new Error('Retriever not initialized. Call setRetriever() first.');
     const topK = Math.min(Math.max(params.topK ?? 5, 1), 20);
-    return retrieverInstance.retrieve(params.query, { datasetId: ctx.datasetId, topK });
+    const { results, details } = await retrieverInstance.retrieveWithDetails(params.query, { datasetId: ctx.datasetId, topK });
+    detailsBuffer.push(details);
+    return results;
   },
 };

@@ -1,4 +1,6 @@
 .codegraph
 .omo
+.playwright-mcp
+
 
 data/*.txt

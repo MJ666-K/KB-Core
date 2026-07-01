@@ -1,4 +1,5 @@
 import { pgTable, uuid, timestamp, jsonb, integer } from 'drizzle-orm/pg-core';
+import type { RetrievalDetails } from '../../retrieve/retriever';
 
 export interface AgentStep {
   iteration: number;
@@ -6,6 +7,7 @@ export interface AgentStep {
   action: string;
   params: Record<string, unknown>;
   resultSummary: string;
+  retrievalDetails?: RetrievalDetails[];
 }
 
 export const agentTraces = pgTable('agent_traces', {

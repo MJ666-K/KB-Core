@@ -4,6 +4,7 @@ import type { ToolRegistry } from '../tools/registry';
 import type { HookRegistry } from '../hooks/registry';
 import type { SkillContext, SkillResult } from '../skills/types';
 import { SkillExecutor } from '../skills/executor';
+import { drainRetrievalDetails } from '../tools/search-knowledge';
 import type { Citation, ToolCallRecord, AgentStep } from '../db/schema';
 import { buildSystemPrompt } from './system-prompt';
 import type { QueryOptions, QueryResult } from './types';
@@ -64,6 +65,11 @@ export class QueryAgent {
 
         const result = await this.executeCallable(name, params, options);
         allToolCalls.push({ name, kind: this.skillRegistry.has(name) ? 'skill' : 'tool', params });
+
+        const retrievalDetails = drainRetrievalDetails();
+        if (retrievalDetails.length > 0) {
+          steps[steps.length - 1]!.retrievalDetails = retrievalDetails;
+        }
 
         if (this.isSkillResult(result)) {
           skillResults.push(result);

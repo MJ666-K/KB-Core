@@ -52,30 +52,19 @@ async function waitForServer(maxWait = 30000): Promise<boolean> {
 }
 
 async function runQuery(question: string, _datasetId: string, timeout = 120000): Promise<{ answer: string; termination: string; latencyMs: number }> {
-  const start = Date.now();
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
-
+  const { wsQuery } = await import('./ws-query');
   try {
-    const res = await fetch(`${API}/query`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question }),
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    const data = await res.json() as { answer: string; termination: string };
+    const data = await wsQuery(question, timeout);
     return {
       answer: data.answer ?? '',
       termination: data.termination ?? 'unknown',
-      latencyMs: Date.now() - start,
+      latencyMs: data.latencyMs,
     };
-  } catch (err) {
-    clearTimeout(timer);
+  } catch {
     return {
       answer: '',
       termination: 'error',
-      latencyMs: Date.now() - start,
+      latencyMs: 0,
     };
   }
 }
@@ -152,10 +141,7 @@ async function main() {
   } catch {
   }
   if (!datasetId) {
-    const pgRes = await fetch('http://localhost:3000/documents?limit=1');
-    if (pgRes.ok) {
-      const docs = await pgRes.json() as { documents: Array<{ id: string }> };
-    }
+    console.log('(未解析到 default datasetId，WS 查询将使用服务端 default)');
   }
   console.log(`datasetId: ${datasetId || '(empty - will use query default)'}`);
 

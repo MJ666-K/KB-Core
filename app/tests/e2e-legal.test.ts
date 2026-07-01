@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, afterAll } from 'bun:test';
 
-const API = 'http://localhost:3000';
+import { wsQuery } from './ws-query';
 
 interface QueryResult {
   answer: string;
@@ -18,13 +18,7 @@ interface QueryResult {
 }
 
 async function query(question: string): Promise<QueryResult> {
-  const res = await fetch(`${API}/query`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question }),
-  }, 120000);
-  if (!res.ok) throw new Error(`API error: ${res.status} ${await res.text()}`);
-  return await res.json() as QueryResult;
+  return wsQuery(question, 120_000);
 }
 
 // ===== 测试用例 =====

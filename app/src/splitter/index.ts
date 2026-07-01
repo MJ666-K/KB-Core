@@ -4,18 +4,26 @@ import { countTokens } from './token-counter';
 import { config } from '../config';
 
 export function createSplitter(): ParentChildSplitter {
+  return createSplitterWithConfig(config.chunkParentTokens, config.chunkChildTokens, config.chunkOverlapTokens);
+}
+
+export function createSplitterWithConfig(
+  parentTokens: number,
+  childTokens: number,
+  overlapTokens: number,
+): ParentChildSplitter {
   return new ParentChildSplitter(
     {
-      maxChunkSize: config.chunkParentTokens,
-      overlapSize: Math.floor(config.chunkOverlapTokens * 1.5),
-      minChunkSize: Math.floor(config.chunkParentTokens / 4),
+      maxChunkSize: parentTokens,
+      overlapSize: Math.floor(overlapTokens * 1.5),
+      minChunkSize: Math.floor(parentTokens / 4),
       lengthFunction: countTokens,
       separators: SEPARATOR_LEVELS,
     },
     {
-      maxChunkSize: config.chunkChildTokens,
-      overlapSize: config.chunkOverlapTokens,
-      minChunkSize: Math.floor(config.chunkChildTokens / 3),
+      maxChunkSize: childTokens,
+      overlapSize: overlapTokens,
+      minChunkSize: Math.floor(childTokens / 3),
       lengthFunction: countTokens,
       separators: SEPARATOR_LEVELS,
     },

@@ -26,6 +26,8 @@ export const chunks = pgTable('chunks', {
   content: text('content').notNull(),
   contentHash: text('content_hash').notNull(),
   tokenCount: integer('token_count').notNull(),
+  startOffset: integer('start_offset'),
+  endOffset: integer('end_offset'),
   embedding: vector('embedding', { dimensions: 1024 }),
   embeddingStatus: embeddingStatusEnum('embedding_status').notNull().default('pending'),
   scope: text('scope').notNull().default('platform'),

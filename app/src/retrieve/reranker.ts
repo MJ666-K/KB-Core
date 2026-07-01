@@ -9,15 +9,21 @@ export interface RerankCandidate {
   score: number;
 }
 
+export interface RerankResult {
+  results: RerankCandidate[];
+  fallback: boolean;
+}
+
 export interface Reranker {
-  rank(query: string, candidates: RerankCandidate[], topK?: number): Promise<RerankCandidate[]>;
+  rank(query: string, candidates: RerankCandidate[], topK?: number): Promise<RerankResult>;
 }
 
 export class ApiReranker implements Reranker {
   private readonly maxDocChars = 8000;
+  private readonly defaultInstruct = 'Given a web search query, retrieve relevant passages that answer the query.';
 
-  async rank(query: string, candidates: RerankCandidate[], topK?: number): Promise<RerankCandidate[]> {
-    if (candidates.length <= 1) return candidates;
+  async rank(query: string, candidates: RerankCandidate[], topK?: number): Promise<RerankResult> {
+    if (candidates.length <= 1) return { results: candidates, fallback: true };
     const limit = topK ?? candidates.length;
 
     try {
@@ -31,14 +37,11 @@ export class ApiReranker implements Reranker {
         },
         body: JSON.stringify({
           model: config.rerankModelId,
-          input: {
-            query,
-            documents,
-          },
-          parameters: {
-            top_n: limit,
-            return_documents: false,
-          },
+          query,
+          documents,
+          top_n: limit,
+          return_documents: false,
+          instruct: this.defaultInstruct,
         }),
       });
 
@@ -52,18 +55,19 @@ export class ApiReranker implements Reranker {
       };
 
       const results = json.output?.results ?? json.results ?? [];
-      if (results.length === 0) return candidates.slice(0, limit);
+      if (results.length === 0) return { results: candidates.slice(0, limit), fallback: true };
 
-      return results.map(r => ({ ...candidates[r.index]!, score: r.relevance_score }));
+      const ranked = results.map(r => ({ ...candidates[r.index]!, score: r.relevance_score }));
+      return { results: ranked, fallback: false };
     } catch (err) {
       logger.warn('Rerank failed, falling back to original order', err);
-      return candidates.slice(0, limit);
+      return { results: candidates.slice(0, limit), fallback: true };
     }
   }
 }
 
 export class PassThroughReranker implements Reranker {
-  async rank(_: string, candidates: RerankCandidate[], topK?: number): Promise<RerankCandidate[]> {
-    return candidates.slice(0, topK ?? candidates.length);
+  async rank(_: string, candidates: RerankCandidate[], topK?: number): Promise<RerankResult> {
+    return { results: candidates.slice(0, topK ?? candidates.length), fallback: true };
   }
 }

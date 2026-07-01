@@ -44,6 +44,7 @@ export async function ingestDocument(docId: string, sourcePath: string, datasetI
         documentId: docId, parentId: null,
         parentChunkIndex: u.parentChunkIndex, childIndexWithinParent: null, chunkIndex: idx,
         content: u.text, contentHash: u.contentHash, tokenCount: u.tokenCount,
+        startOffset: u.startOffset, endOffset: u.endOffset,
         scope: 'platform', datasetId,
       })),
     ).returning({ id: chunks.id, parentChunkIndex: chunks.parentChunkIndex });
@@ -57,6 +58,7 @@ export async function ingestDocument(docId: string, sourcePath: string, datasetI
         parentChunkIndex: u.parentChunkIndex, childIndexWithinParent: u.childIndexWithinParent,
         chunkIndex: u.parentChunkIndex * 1000 + (u.childIndexWithinParent ?? 0),
         content: u.text, contentHash: u.contentHash, tokenCount: u.tokenCount,
+        startOffset: u.startOffset, endOffset: u.endOffset,
         scope: 'platform', datasetId,
       })),
     ).returning({ id: chunks.id });

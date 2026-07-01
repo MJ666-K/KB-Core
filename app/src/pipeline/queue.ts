@@ -10,11 +10,13 @@ const connection = {
 
 export const ingestQueue = new Queue('ingest', { connection });
 
+type IngestJobData = { docId: string; sourcePath: string; datasetId: string };
+
 export function startWorker(): void {
   const worker = new Worker(
     'ingest',
     async (job) => {
-      const { docId, sourcePath, datasetId } = job.data as { docId: string; sourcePath: string; datasetId: string; };
+      const { docId, sourcePath, datasetId } = job.data as IngestJobData;
       logger.info(`[Worker] Processing document: ${docId}`);
       await ingestDocument(docId, sourcePath, datasetId);
     },
@@ -25,7 +27,6 @@ export function startWorker(): void {
   logger.info('[Worker] Ingest worker started');
 }
 
-// 支持独立运行：bun src/pipeline/queue.ts
 if (import.meta.main) {
   startWorker();
 }
