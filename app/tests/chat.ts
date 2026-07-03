@@ -1,4 +1,16 @@
 import { createInterface } from 'readline';
+import { marked } from 'marked';
+import TerminalRenderer from 'marked-terminal';
+
+marked.setOptions({
+  renderer: new TerminalRenderer({
+    emoji: true,
+    width: Math.min((process.stdout.columns ?? 80) - 2, 100),
+    reflowText: true,
+    showSectionPrefix: true,
+    tab: 2,
+  }) as unknown as typeof marked.defaults.renderer,
+});
 
 const WS_URL = process.env.KB_WS_URL ?? 'ws://localhost:3000/ws/query';
 const DATASET_ID = process.env.KB_DATASET_ID ?? undefined;
@@ -17,8 +29,12 @@ let rl: ReturnType<typeof createInterface>;
 let thinkingBuf = '';
 let answerBuf = '';
 let gotAnswerTokens = false;
+let gotThinkingToken = false;
+let answerStreaming = false;
+let answerLnCount = 0;
 let spinnerTimer: ReturnType<typeof setInterval> | null = null;
 let phase: 'idle' | 'thinking' | 'tool' | 'answering' = 'idle';
+let lastStep: { action: string; kind: string; count: number } | null = null;
 
 function print(t: string): void { process.stdout.write(t + '\n'); }
 function clearLine(): void { process.stdout.write('\r\x1b[K'); }
@@ -54,12 +70,11 @@ function showSteps(): void {
 }
 
 function formatAnswer(t: string): string {
-  return t
-    .replace(/\*\*(.+?)\*\*/g, `${C.bold}$1${C.reset}`)
-    .replace(/`(.+?)`/g, `${C.cyan}$1${C.reset}`)
-    .replace(/^#{1,3}\s+(.+)$/gm, `\n${C.bold}${C.blue}$1${C.reset}`)
-    .replace(/^(\d+\.)/gm, `${C.yellow}$1${C.reset}`)
-    .replace(/^[-*]\s/gm, `${C.yellow}•${C.reset} `);
+  try {
+    return (marked.parse(t) as string).replace(/\n$/, '');
+  } catch {
+    return t;
+  }
 }
 
 function handleEvent(data: Record<string, unknown>): void {
@@ -68,33 +83,66 @@ function handleEvent(data: Record<string, unknown>): void {
       if (!data.token) {
         if (phase !== 'thinking') { phase = 'thinking'; thinkingBuf = ''; startSpinner('思考中...'); }
       } else {
-        if (phase !== 'thinking') { phase = 'thinking'; thinkingBuf = ''; stopSpinner(); process.stdout.write(`${C.gray}💭 `); }
+        if (!gotThinkingToken) { gotThinkingToken = true; stopSpinner(); process.stdout.write(`${C.gray}💭 `); }
         thinkingBuf += data.token as string;
         process.stdout.write(`${C.gray}${data.token as string}`);
       }
       break;
     case 'thinking_end':
-      if (phase === 'thinking' && thinkingBuf) process.stdout.write(`${C.reset}\n`); else stopSpinner();
+      stopSpinner();
+      if (gotThinkingToken) process.stdout.write(`${C.reset}\n`);
       phase = 'idle';
       break;
-    case 'step':
-      phase = 'tool'; stopSpinner();
-      print(`${C.dim}  🔧 ${C.cyan}${data.action as string}${C.dim} (${data.kind})${C.reset}`);
+    case 'step': {
+      phase = 'tool';
+      const action = data.action as string;
+      const kind = (data.kind as string) || 'tool';
+      if (lastStep && lastStep.action === action && lastStep.kind === kind) {
+        lastStep.count++;
+        startSpinner(`🔧 ${action} (${kind}) ×${lastStep.count}`);
+      } else {
+        if (lastStep) {
+          stopSpinner();
+          process.stdout.write(`\r\x1b[K${C.dim}  ✅ ${lastStep.action}${lastStep.count > 1 ? ` ×${lastStep.count}` : ''}${C.reset}\n`);
+        }
+        lastStep = { action, kind, count: 1 };
+        startSpinner(`🔧 ${action} (${kind})`);
+      }
       break;
-    case 'step_end':
-      stopSpinner(); phase = 'idle';
-      print(`${C.dim}  ✅ ${data.action as string}${data.summary ? ` — ${(data.summary as string).slice(0, 60)}` : ''}${C.reset}`);
+    }
+    case 'step_end': {
       break;
+    }
     case 'answer_start':
-      phase = 'answering'; answerBuf = ''; gotAnswerTokens = true; stopSpinner();
-      print(`\n${C.green}${C.bold}🤖 回答${C.reset}\n`);
+      phase = 'answering'; answerBuf = ''; answerLnCount = 0; gotAnswerTokens = false; answerStreaming = false; stopSpinner();
+      if (lastStep) {
+        process.stdout.write(`\r\x1b[K${C.dim}  ✅ ${lastStep.action}${lastStep.count > 1 ? ` ×${lastStep.count}` : ''}${C.reset}\n`);
+        lastStep = null;
+      } else {
+        process.stdout.write('\n');
+      }
+      print(`${C.green}${C.bold}🤖 回答${C.reset}`);
+      startSpinner('生成中...');
       break;
     case 'token':
-      answerBuf += data.token as string; process.stdout.write(data.token as string);
+      if (!gotAnswerTokens) { gotAnswerTokens = true; answerStreaming = true; stopSpinner(); process.stdout.write('\n'); answerLnCount++; }
+      answerBuf += data.token as string;
+      process.stdout.write(data.token as string);
+      answerLnCount += ((data.token as string).match(/\n/g) || []).length;
       break;
-    case 'answer_end':
-      process.stdout.write('\n'); phase = 'idle';
+    case 'answer_end': {
+      stopSpinner();
+      if (gotAnswerTokens) {
+        const moveUp = answerLnCount + 1;
+        process.stdout.write(`\x1b[${moveUp}A\x1b[J`);
+        print(formatAnswer(answerBuf));
+      } else if (!gotAnswerTokens) {
+        process.stdout.write('\n');
+      }
+      process.stdout.write('\n');
+      phase = 'idle';
       break;
+    }
     case 'result': {
       stopSpinner(); phase = 'idle';
       const citations = (data.citations as Citation[]) ?? [];
@@ -103,9 +151,16 @@ function handleEvent(data: Record<string, unknown>): void {
 
       if (!gotAnswerTokens) {
         const answer = (data.answer as string) ?? thinkingBuf;
-        print(`\n${C.green}${C.bold}🤖 回答${C.reset}\n`);
-        print(formatAnswer(answer));
-        history.push({ role: 'assistant', content: answer });
+        if (termination === 'direct' && gotThinkingToken) {
+          // thinking tokens were already the answer (shown in 💭 section), no re-print
+          process.stdout.write(`${C.reset}\n`);
+          history.push({ role: 'assistant', content: answer });
+        } else {
+          if (!answerStreaming) print(`\n${C.green}${C.bold}🤖 回答${C.reset}\n`);
+          print(formatAnswer(answer));
+          history.push({ role: 'assistant', content: answer });
+          answerStreaming = false;
+        }
       } else {
         history.push({ role: 'assistant', content: answerBuf });
       }
@@ -128,7 +183,7 @@ function handleEvent(data: Record<string, unknown>): void {
 }
 
 async function query(question: string): Promise<void> {
-  gotAnswerTokens = false; thinkingBuf = ''; answerBuf = ''; phase = 'idle';
+  gotAnswerTokens = false; gotThinkingToken = false; thinkingBuf = ''; answerBuf = ''; answerStreaming = false; phase = 'idle'; answerLnCount = 0; lastStep = null;
 
   await new Promise<void>((resolve, reject) => {
     const ws = new WebSocket(WS_URL);

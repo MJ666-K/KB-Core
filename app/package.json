@@ -16,6 +16,7 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/marked-terminal": "^6.1.1",
     "@types/pg": "^8.20.0",
     "drizzle-kit": "^0.31.10"
   },
@@ -27,6 +28,8 @@
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.27",
     "ioredis": "^5.11.1",
+    "marked": "^18.0.5",
+    "marked-terminal": "^7.3.0",
     "nanoid": "^5.1.16",
     "pg": "^8.22.0",
     "yaml": "^2.9.0",

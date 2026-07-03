@@ -165,7 +165,7 @@ export class QueryAgent {
   }
 
   private isSkillResult(result: unknown): result is SkillResult {
-    return typeof result === 'object' && result !== null && 'answer' in result && 'citations' in result && 'toolCalls' in result;
+    return typeof result === 'object' && result !== null && 'answer' in result && 'toolCalls' in result;
   }
 
   private isRetrievalResult(item: unknown): boolean {
