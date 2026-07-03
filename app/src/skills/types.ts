@@ -4,6 +4,7 @@ import type { HookRegistry } from '../hooks/registry';
 import type { RetrievalResult } from '../retrieve/retriever';
 import type { Citation, ToolCallRecord } from '../db/schema';
 import type { JSONSchemaProperty } from '../tools/types';
+import type { EventStream } from '../agent/types';
 
 /** SKILL.md frontmatter 解析结果 */
 export interface SkillMetadata {
@@ -27,6 +28,7 @@ export interface SkillContext {
   tools: ToolRegistry;
   llm: LLMService;
   hooks: HookRegistry;
+  events?: EventStream;
   executeTool(name: string, params: Record<string, unknown>): Promise<unknown>;
 }
 

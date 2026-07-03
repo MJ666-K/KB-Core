@@ -18,3 +18,18 @@ export interface QueryResult {
   queryLogId: string;
   termination: 'skill' | 'synthesis' | 'direct';
 }
+
+export type AgentEvent =
+  | { type: 'thinking_start' }
+  | { type: 'thinking_token'; token: string }
+  | { type: 'thinking_end' }
+  | { type: 'tool_call_start'; name: string; kind: 'tool' | 'skill' }
+  | { type: 'tool_call_end'; name: string; summary?: string }
+  | { type: 'answer_start' }
+  | { type: 'answer_token'; token: string }
+  | { type: 'answer_end' }
+  | { type: 'result_end'; citations: Citation[]; latencyMs: number; termination: string; queryLogId: string };
+
+export interface EventStream {
+  emit(event: AgentEvent): void;
+}

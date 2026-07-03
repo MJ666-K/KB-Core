@@ -5,6 +5,7 @@ import { datasets } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import type { Message } from '../llm/llm-service';
 import { getAgent } from '../agent/registry';
+import type { EventStream } from '../agent/types';
 
 const queryMessageSchema = z.object({
   type: z.literal('query'),
@@ -73,12 +74,29 @@ export const queryWebSocket = {
 
     try {
       const history = body.options?.history as Message[] | undefined;
+
+      const wsEvents: EventStream = {
+        emit(event) {
+          switch (event.type) {
+            case 'thinking_start': send(ws, { type: 'thinking' }); break;
+            case 'thinking_token': send(ws, { type: 'thinking', token: event.token }); break;
+            case 'thinking_end': send(ws, { type: 'thinking_end' }); break;
+            case 'tool_call_start': send(ws, { type: 'step', action: event.name, kind: event.kind }); break;
+            case 'tool_call_end': send(ws, { type: 'step_end', action: event.name, summary: event.summary }); break;
+            case 'answer_start': send(ws, { type: 'answer_start' }); break;
+            case 'answer_token': send(ws, { type: 'token', token: event.token }); break;
+            case 'answer_end': send(ws, { type: 'answer_end' }); break;
+            case 'result_end': break;
+          }
+        },
+      };
+
       const result = await agent.execute(body.question, {
         datasetId,
         topK: body.options?.topK,
         maxIterations: body.options?.maxIterations,
         history,
-      });
+      }, wsEvents);
       send(ws, { type: 'result', ...result });
     } catch (err) {
       send(ws, {

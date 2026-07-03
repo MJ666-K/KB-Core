@@ -38,17 +38,20 @@ export class SkillExecutor {
     const allRetrievalResults: RetrievalResult[] = [];
 
     for (let iter = 0; iter < MAX_SKILL_ITERATIONS; iter++) {
+      const isLastIter = iter === MAX_SKILL_ITERATIONS - 1;
+      const hasTools = toolDefs.length > 0 && !isLastIter;
       const response = await ctx.llm.chat({
         messages,
-        tools: toolDefs.length > 0 ? toolDefs : undefined,
-        tool_choice: toolDefs.length > 0 ? 'auto' : undefined,
+        tools: hasTools ? toolDefs : undefined,
+        tool_choice: hasTools ? 'auto' : undefined,
         temperature: 0.3,
       });
 
       if (!response.tool_calls?.length) {
         logger.debug(`[SkillExecutor] done in ${iter + 1} iteration(s)`);
+        const answer = await this.streamAnswer(ctx, messages, response.content ?? '');
         const deduped = deduplicateChunks(allRetrievalResults);
-        return { answer: response.content ?? '', citations: formatCitations(deduped), toolCalls: allToolCalls };
+        return { answer, citations: formatCitations(deduped), toolCalls: allToolCalls };
       }
 
       messages.push({ role: 'assistant', content: response.content ?? '', tool_calls: response.tool_calls });
@@ -57,10 +60,14 @@ export class SkillExecutor {
         let params: Record<string, unknown>;
         try { params = JSON.parse(call.function.arguments); } catch { params = {}; }
 
+        ctx.events?.emit({ type: 'tool_call_start', name: call.function.name, kind: 'tool' });
         const result = await ctx.executeTool(call.function.name, params);
         allToolCalls.push({ name: call.function.name, kind: 'tool', params });
+        const summary = typeof result === 'object' && result !== null && 'text' in result
+          ? `找到 ${Array.isArray(result) ? (result as unknown[]).length : 1} 条结果`
+          : undefined;
+        ctx.events?.emit({ type: 'tool_call_end', name: call.function.name, summary });
 
-        // 检查是否是 RetrievalResult[]，如果是则收集用于生成 citations
         if (this.isRetrievalResultArray(result)) {
           allRetrievalResults.push(...result);
         }
@@ -74,11 +81,31 @@ export class SkillExecutor {
     }
 
     logger.warn(`[SkillExecutor] max ${MAX_SKILL_ITERATIONS} iterations, forcing answer`);
-    const final = await ctx.llm.chat({
-      messages: [...messages, { role: 'user', content: '请基于以上信息给出最终回答。' }],
-    });
+    const forceMessages = [...messages, { role: 'user' as const, content: '请基于以上信息给出最终回答。' }];
+    const answer = await this.streamAnswer(ctx, forceMessages, null);
     const deduped = deduplicateChunks(allRetrievalResults);
-    return { answer: final.content ?? '', citations: formatCitations(deduped), toolCalls: allToolCalls };
+    return { answer, citations: formatCitations(deduped), toolCalls: allToolCalls };
+  }
+
+  private async streamAnswer(ctx: SkillContext, messages: Message[], fallback: string | null): Promise<string> {
+    if (!ctx.events) {
+      if (fallback !== null) return fallback;
+      const res = await ctx.llm.chat({ messages, temperature: 0.3 });
+      return res.content ?? '';
+    }
+
+    ctx.events.emit({ type: 'answer_start' });
+    let answer = '';
+
+    for await (const chunk of ctx.llm.chatStream({ messages, temperature: 0.3 })) {
+      if (chunk.type === 'token') {
+        answer += chunk.content;
+        ctx.events.emit({ type: 'answer_token', token: chunk.content });
+      }
+    }
+
+    ctx.events.emit({ type: 'answer_end' });
+    return answer || fallback || '';
   }
 
   private isRetrievalResultArray(result: unknown): result is RetrievalResult[] {

@@ -103,6 +103,102 @@ export class LLMService {
     return { content: msg.content, tool_calls: msg.tool_calls };
   }
 
+  async *chatStream(opts: ChatOptions): AsyncIterable<StreamChunk> {
+    const url = `${config.llmApiUrl}/chat/completions`;
+    const body: Record<string, unknown> = {
+      model: config.llmModelId,
+      messages: opts.messages,
+      temperature: opts.temperature ?? 0.2,
+      stream: true,
+    };
+
+    if (opts.tools && opts.tools.length > 0) {
+      body.tools = opts.tools;
+      body.tool_choice = opts.tool_choice ?? 'auto';
+    }
+    if (opts.maxTokens) {
+      body.max_tokens = opts.maxTokens;
+    }
+
+    const res = await fetchWithRetry(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.llmApiKey}`,
+      },
+      body: JSON.stringify(body),
+    }, 'LLM-stream');
+
+    if (!res.ok) {
+      const errorBody = await res.text();
+      logger.error('LLM Stream error', { status: res.status, body: errorBody });
+      throw new Error(`LLM API error: ${res.status} ${errorBody}`);
+    }
+
+    if (!res.body) {
+      throw new Error('LLM stream: no response body');
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    const toolCallsAcc = new Map<number, { id: string; name: string; arguments: string }>();
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith(':')) continue;
+        if (trimmed === 'data: [DONE]') continue;
+        if (!trimmed.startsWith('data: ')) continue;
+
+        const jsonStr = trimmed.slice(6);
+        try {
+          const chunk = JSON.parse(jsonStr) as SSEChunk;
+          const choice = chunk.choices?.[0];
+          if (!choice) continue;
+
+          if (choice.delta?.content) {
+            yield { type: 'token', content: choice.delta.content };
+          }
+
+          if (choice.delta?.tool_calls) {
+            for (const tc of choice.delta.tool_calls) {
+              const acc = toolCallsAcc.get(tc.index) ?? { id: '', name: '', arguments: '' };
+              if (tc.id) acc.id = tc.id;
+              if (tc.function?.name) acc.name += tc.function.name;
+              if (tc.function?.arguments) acc.arguments += tc.function.arguments;
+              toolCallsAcc.set(tc.index, acc);
+            }
+          }
+
+          if (choice.finish_reason === 'tool_calls') {
+            const toolCalls: ToolCall[] = [...toolCallsAcc.values()].map(tc => ({
+              id: tc.id,
+              type: 'function' as const,
+              function: { name: tc.name, arguments: tc.arguments },
+            }));
+            yield { type: 'done', tool_calls: toolCalls };
+            return;
+          }
+
+          if (choice.finish_reason === 'stop') {
+            yield { type: 'done' };
+            return;
+          }
+        } catch {
+          // skip malformed SSE
+        }
+      }
+    }
+  }
+
   async generate(
     prompt: string,
     opts?: { temperature?: number; maxTokens?: number },
@@ -114,4 +210,22 @@ export class LLMService {
     });
     return res.content ?? '';
   }
+}
+
+export type StreamChunk =
+  | { type: 'token'; content: string }
+  | { type: 'done'; tool_calls?: ToolCall[] };
+
+interface SSEChunk {
+  choices?: Array<{
+    delta?: {
+      content?: string;
+      tool_calls?: Array<{
+        index: number;
+        id?: string;
+        function?: { name?: string; arguments?: string };
+      }>;
+    };
+    finish_reason?: string;
+  }>;
 }
