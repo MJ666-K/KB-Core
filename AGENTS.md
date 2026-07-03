@@ -76,6 +76,15 @@
 ## 文件结构
 
 ```
+PROJECT.md               ← 项目入口（模块概览 + 技术栈 + API）
+AGENTS.md                ← 本文件（Agent 工作规则）
+
+openspec/                ← 设计文档 + 变更管理
+├── README.md            ← OpenSpec 规范说明
+├── add/                 ← 新功能设计文档（实现前必须写）
+├── change/              ← 架构级改动文档
+└── changelog/           ← 变更日志（与代码同批完成）
+
 docs/
 ├── 开发文档.md          ← 开发唯一入口（步骤总览 + 详细代码）
 ├── 知识库设计.md        ← 架构设计（设计变更时更新）
@@ -163,12 +172,55 @@ docker-compose ps              # 查看状态
 
 ---
 
+## OpenSpec 变更工作流
+
+Phase 1 完成后，项目进入自由迭代阶段。从此以后，所有变更遵循 OpenSpec 流程：
+
+### 新功能 → `openspec/add/`
+
+```
+1. 写 openspec/add/{YYYYMMDD}-{缩写}-{描述}.md → 等用户确认
+2. 实现代码 → 跑测试
+3. openspec/changelog/ 记录变更（与代码同批）
+```
+
+### 架构改动 → `openspec/change/`
+
+```
+1. 写 openspec/change/{YYYYMMDD}-{缩写}-{描述}.md → 等用户确认
+2. 回归测试 → openspec/changelog/ 记录
+```
+
+### Bug 修复 / 普通变更
+
+```
+改代码 → 跑测试 → openspec/changelog/ 记录（同批完成）
+```
+
+### 项目缩写表
+
+| 缩写 | 范围 |
+|------|------|
+| `backend` | 后端 API、Worker、数据库 |
+| `core` | 核心业务逻辑（Agent/Skill/Tool） |
+| `pipeline` | 入库流水线、队列 |
+| `deploy` | 部署、基础设施 |
+| `global` | 全项目、跨模块、文档 |
+
+> 详细命名规则、模板 → `openspec/README.md` + 各目录 `_template.md`
+
+---
+
 ## 联系文档
 
 | 想了解 | 看哪里 |
 |---|---|
+| 项目全景 | `PROJECT.md` |
 | 下一步该做什么 | `docs/开发文档.md` → 开发步骤总览 |
 | 这步怎么实现 | `docs/开发文档.md` → 对应 Part 详情 |
 | 为什么这样设计 | `docs/知识库设计.md` |
 | 为什么选这个技术 | `docs/选型说明.md` |
 | 修复了哪些 bug | `docs/开发文档.md` → Part 0.3 |
+| 最近做了什么变更 | `openspec/changelog/` |
+| 新功能设计 | `openspec/add/` |
+| 架构改动 | `openspec/change/` |
