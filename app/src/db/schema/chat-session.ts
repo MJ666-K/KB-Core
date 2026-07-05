@@ -6,10 +6,12 @@ export interface ChatMessageMeta {
   termination?: string;
   toolCalls?: Array<{ name: string; kind: string }>;
   followUpQuestions?: string[];
+  queryJobId?: string;
 }
 
 export const chatSessions = pgTable('chat_sessions', {
   id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id'),
   title: text('title').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

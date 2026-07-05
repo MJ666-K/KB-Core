@@ -16,6 +16,7 @@ import {
   type SessionSummary,
 } from '../chatSessions';
 import { buildChatHints, CHAT_INTRO } from '../chatHints';
+import { getAuthToken } from '../auth/storage';
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -135,6 +136,13 @@ export default function Chat() {
   const pendingAssistantPersistRef = useRef<Promise<string | null> | null>(null);
   const syncDraftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flushAssistantDraftRef = useRef<() => Promise<void>>(async () => {});
+  const wsAuthedRef = useRef(false);
+  const pendingWsPayloadRef = useRef<string | null>(null);
+  const activeJobIdRef = useRef<string | null>(null);
+  const jobPollSinceRef = useRef(0);
+  const jobPollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stopJobPollingRef = useRef<() => void>(() => {});
+  const startJobPollingRef = useRef<(jobId: string) => void>(() => {});
 
   const setSessionId = useCallback((id: string | null) => {
     sessionIdRef.current = id;
@@ -185,7 +193,10 @@ export default function Chat() {
     el.scrollTop = el.scrollHeight;
   }, [messages]);
 
-  useEffect(() => () => { wsRef.current?.close(); }, []);
+  useEffect(() => () => {
+    stopJobPollingRef.current();
+    wsRef.current?.close();
+  }, []);
 
   const patchAssistant = useCallback((fn: (m: AgentMsg) => AgentMsg) => {
     const id = assistantIdRef.current;
@@ -311,9 +322,12 @@ export default function Chat() {
       const draft = assistantDraftRef.current;
       if (!sid || !msgId || !draft?.content?.trim() || finishedRef.current) return;
       const body = assistantPersistBody(draft);
+      const token = getAuthToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
       fetch(`/api/sessions/${sid}/messages/${msgId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(body),
         keepalive: true,
       }).catch(() => { /* 页面卸载时尽力保存 */ });
@@ -329,6 +343,8 @@ export default function Chat() {
     finishedRef.current = true;
     assistantIdRef.current = null;
     pendingAssistantRef.current = null;
+    activeJobIdRef.current = null;
+    stopJobPollingRef.current();
     setLoading(false);
     setInputWhileLoading(false);
 
@@ -371,6 +387,29 @@ export default function Chat() {
     const token = data.token as string | undefined;
     const apply = (fn: (m: AgentMsg) => AgentMsg) => patchAssistant(fn);
 
+    if (type === 'auth_ok') {
+      wsAuthedRef.current = true;
+      const ws = wsRef.current;
+      if (ws && pendingWsPayloadRef.current) {
+        ws.send(pendingWsPayloadRef.current);
+        pendingWsPayloadRef.current = null;
+      }
+      return;
+    }
+    if (type === 'job_started') {
+      activeJobIdRef.current = typeof data.jobId === 'string' ? data.jobId : null;
+      return;
+    }
+    if (type === 'resume_ok') {
+      const status = data.status as string | undefined;
+      if (status === 'running' && activeJobIdRef.current) {
+        if (typeof data.eventCount === 'number') {
+          jobPollSinceRef.current = data.eventCount;
+        }
+        startJobPollingRef.current(activeJobIdRef.current);
+      }
+      return;
+    }
     if (type === 'thinking_start') {
       apply(msg => ({ ...msg, phase: 'thinking' }));
       return;
@@ -465,6 +504,46 @@ export default function Chat() {
   const handleMsgRef = useRef(handleMsg);
   handleMsgRef.current = handleMsg;
 
+  const stopJobPolling = useCallback(() => {
+    if (jobPollTimerRef.current) {
+      clearInterval(jobPollTimerRef.current);
+      jobPollTimerRef.current = null;
+    }
+  }, []);
+  stopJobPollingRef.current = stopJobPolling;
+
+  const startJobPolling = useCallback((jobId: string) => {
+    stopJobPolling();
+    jobPollTimerRef.current = setInterval(() => {
+      void (async () => {
+        try {
+          const { events, nextSince, job } = await api.getQueryJob(jobId, jobPollSinceRef.current);
+          jobPollSinceRef.current = nextSince;
+          for (const ev of events) {
+            handleMsgRef.current(ev);
+          }
+          if (job.status === 'completed') {
+            stopJobPolling();
+            activeJobIdRef.current = null;
+            if (job.result && typeof job.result === 'object') {
+              handleMsgRef.current(job.result as Record<string, unknown>);
+            }
+          } else if (job.status === 'failed') {
+            stopJobPolling();
+            activeJobIdRef.current = null;
+            finishAssistant({
+              content: `❌ ${typeof job.error === 'string' ? job.error : '查询失败'}`,
+              phase: 'error',
+            });
+          }
+        } catch {
+          stopJobPolling();
+        }
+      })();
+    }, 1500);
+  }, [stopJobPolling, finishAssistant]);
+  startJobPollingRef.current = startJobPolling;
+
   const bindWs = useCallback((ws: WebSocket) => {
     ws.onmessage = (ev) => {
       try {
@@ -477,8 +556,13 @@ export default function Chat() {
       }
     };
     ws.onclose = () => {
+      wsAuthedRef.current = false;
       if (!assistantIdRef.current || finishedRef.current) return;
       void flushAssistantDraftRef.current();
+      if (activeJobIdRef.current) {
+        startJobPollingRef.current(activeJobIdRef.current);
+        return;
+      }
       const draft = assistantDraftRef.current;
       if (!draft?.content?.trim()) return;
       finishAssistant({
@@ -489,7 +573,87 @@ export default function Chat() {
         phase: 'done',
       });
     };
-  }, [finishAssistant, patchAssistant]);
+  }, [finishAssistant]);
+
+  const connectWsWithPayload = useCallback((payload: string) => {
+    const dispatch = (ws: WebSocket) => {
+      if (wsAuthedRef.current) {
+        ws.send(payload);
+      } else {
+        pendingWsPayloadRef.current = payload;
+        ws.send(JSON.stringify({ type: 'auth', token: getAuthToken() }));
+      }
+    };
+
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      bindWs(wsRef.current);
+      dispatch(wsRef.current);
+      return;
+    }
+
+    wsAuthedRef.current = false;
+    pendingWsPayloadRef.current = payload;
+    const ws = new WebSocket(WS_URL);
+    wsRef.current = ws;
+    bindWs(ws);
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'auth', token: getAuthToken() }));
+    };
+  }, [bindWs]);
+
+  const resumeActiveJob = useCallback(async (
+    sessionId: string,
+    jobId: string,
+    partialAnswer: string,
+  ) => {
+    let eventSince = 0;
+    try {
+      const detail = await api.getQueryJob(jobId, 0);
+      eventSince = detail.nextSince;
+    } catch {
+      return;
+    }
+    jobPollSinceRef.current = eventSince;
+    activeJobIdRef.current = jobId;
+    querySessionIdRef.current = sessionId;
+    finishedRef.current = false;
+    savedAssistantMsgIdRef.current = null;
+    pendingAssistantPersistRef.current = null;
+
+    setMessages(prev => {
+      const last = prev[prev.length - 1];
+      if (last?.role === 'assistant' && last.phase !== 'done' && last.phase !== 'error') {
+        assistantIdRef.current = last.id;
+        const merged = partialAnswer.length > last.content.length
+          ? { ...last, content: partialAnswer, phase: 'writing' as MsgPhase }
+          : last;
+        assistantDraftRef.current = merged;
+        pendingAssistantRef.current = merged;
+        return [...prev.slice(0, -1), merged];
+      }
+      const bot = emptyAssistant();
+      if (partialAnswer) {
+        bot.content = partialAnswer;
+        bot.phase = 'writing';
+      }
+      assistantIdRef.current = bot.id;
+      assistantDraftRef.current = bot;
+      pendingAssistantRef.current = bot;
+      return [...prev, bot];
+    });
+
+    setLoading(true);
+    setInputWhileLoading(false);
+    stickToBottomRef.current = true;
+    void ensureAssistantMessage();
+
+    connectWsWithPayload(JSON.stringify({
+      type: 'resume',
+      jobId,
+      sessionId,
+      since: eventSince,
+    }));
+  }, [connectWsWithPayload, ensureAssistantMessage]);
 
   const startNewChat = useCallback(() => {
     if (loading) {
@@ -523,13 +687,22 @@ export default function Chat() {
       if (loaded.length === 0) {
         message.info('该会话暂无已保存的消息');
       }
+
+      try {
+        const jobInfo = await api.getActiveQueryJob(id);
+        if (jobInfo.active && jobInfo.jobId) {
+          await resumeActiveJob(id, jobInfo.jobId, jobInfo.partialAnswer ?? '');
+        }
+      } catch {
+        /* 无进行中的查询时忽略 */
+      }
     } catch (err) {
       message.error(`加载会话失败：${err instanceof Error ? err.message : '未知错误'}`);
       navigate('/chat', { replace: true });
     } finally {
       setLoadingSession(false);
     }
-  }, [loading, navigate, setSessionId]);
+  }, [loading, navigate, setSessionId, resumeActiveJob]);
 
   useEffect(() => {
     if (loading) return;
@@ -622,22 +795,12 @@ export default function Chat() {
     const payload = JSON.stringify({
       type: 'query',
       question: text,
+      sessionId,
       options: { history: historyRef.current.slice(0, -1).slice(-20), topK: 5 },
     });
 
-    const sendQuery = (ws: WebSocket) => { ws.send(payload); };
-
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      bindWs(wsRef.current);
-      sendQuery(wsRef.current);
-      return;
-    }
-
-    const ws = new WebSocket(WS_URL);
-    wsRef.current = ws;
-    bindWs(ws);
-    ws.onopen = () => { sendQuery(ws); };
-  }, [question, loading, bindWs, refreshSessions, navigate, setSessionId, ensureAssistantMessage]);
+    connectWsWithPayload(payload);
+  }, [question, loading, connectWsWithPayload, refreshSessions, navigate, setSessionId, ensureAssistantMessage]);
 
   const grouped = groupSessions(sessions);
   const isDraft = activeSessionId === null && messages.length === 0;

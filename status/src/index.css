@@ -1315,3 +1315,581 @@ body {
   color: #722ed1;
   background: #f9f0ff;
 }
+
+/* ===== Auth / Login ===== */
+.kc-login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: #f5f7fb;
+}
+
+.kc-login-shell {
+  display: flex;
+  width: 100%;
+  max-width: 880px;
+  min-height: 420px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 16px 48px rgba(15, 23, 42, 0.1);
+}
+
+.kc-login-brand {
+  position: relative;
+  flex: 1 1 48%;
+  background: linear-gradient(145deg, #0f3d8a 0%, #1677ff 55%, #69b1ff 100%);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  padding: 32px 32px;
+  overflow: hidden;
+}
+
+.kc-login-brand-inner {
+  position: relative;
+  z-index: 1;
+}
+
+.kc-login-brand-glow {
+  position: absolute;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  top: -80px;
+  right: -80px;
+  filter: blur(2px);
+}
+
+.kc-login-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  margin-bottom: 16px;
+  backdrop-filter: blur(4px);
+}
+
+.kc-login-brand-title {
+  color: #fff !important;
+  margin-bottom: 8px !important;
+  font-weight: 700 !important;
+  font-size: 22px !important;
+}
+
+.kc-login-brand-desc {
+  color: rgba(255, 255, 255, 0.88) !important;
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 20px !important;
+  max-width: 300px;
+}
+
+.kc-login-features {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kc-login-features li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.kc-login-panel {
+  flex: 1 1 52%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 32px;
+}
+
+.kc-login-panel-inner {
+  width: 100%;
+  max-width: 360px;
+}
+
+.kc-login-panel-header {
+  margin-bottom: 20px;
+}
+
+.kc-login-panel-header h3 {
+  margin-bottom: 4px !important;
+  font-weight: 700 !important;
+  font-size: 20px !important;
+}
+
+.kc-login-form .ant-form-item-label > label {
+  font-weight: 500;
+  color: #1f1f1f;
+}
+
+.kc-login-input-icon {
+  color: #00000040;
+}
+
+.kc-login-submit {
+  height: 38px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 8px;
+  margin-top: 2px;
+}
+
+.kc-auth-loading {
+  min-height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 768px) {
+  .kc-login-shell {
+    flex-direction: column;
+    min-height: auto;
+  }
+
+  .kc-login-brand {
+    padding: 32px 24px;
+  }
+
+  .kc-login-panel {
+    padding: 32px 24px 40px;
+  }
+}
+
+/* ===== App Layout / Sidebar ===== */
+.kc-app-sider {
+  position: sticky !important;
+  top: 0;
+  height: 100vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.kc-app-sider .ant-layout-sider-children {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.kc-sider-brand {
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.kc-sider-brand-icon {
+  width: 32px;
+  height: 32px;
+  background: #1677ff;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: #fff;
+}
+
+.kc-sider-brand-title {
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.kc-sider-brand-sub {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+}
+
+.kc-sider-menu-wrap {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.kc-sider-menu-wrap .ant-menu {
+  border-right: none !important;
+}
+
+.kc-sider-footer {
+  flex-shrink: 0;
+  padding: 10px 10px 12px;
+}
+
+.kc-sider-profile {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.kc-sider-profile-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.kc-sider-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1677ff 0%, #4096ff 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.kc-sider-profile-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.kc-sider-username {
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kc-sider-role {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 11px;
+  line-height: 1.3;
+  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kc-sider-logout-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.kc-sider-logout-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.kc-app-header {
+  height: 64px !important;
+  line-height: normal !important;
+  padding: 0 24px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  background: #fff !important;
+  border-bottom: 1px solid #f0f0f0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.kc-app-header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.kc-app-header-icon {
+  width: 36px;
+  height: 36px;
+  background: #e6f4ff;
+  color: #1677ff;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.kc-app-header-titles {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.kc-app-header-version {
+  font-size: 12px;
+  color: #00000073;
+}
+
+/* ===== Access / Roles ===== */
+.kc-access-page .ant-card-body {
+  padding-top: 4px;
+}
+
+.kc-access-loading {
+  padding: 32px;
+  text-align: center;
+}
+
+.kc-access-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+/* 权限分组展示（共用） */
+.kc-perm-display {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.kc-perm-display.is-compact {
+  gap: 6px 12px;
+}
+
+.kc-perm-display-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.kc-perm-display-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #00000073;
+  white-space: nowrap;
+}
+
+.kc-perm-display-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.kc-perm-display-item {
+  font-size: 11px;
+  line-height: 20px;
+  padding: 0 8px;
+  border-radius: 4px;
+  background: #f5f5f5;
+  color: #595959;
+  white-space: nowrap;
+}
+
+.kc-perm-display.is-compact .kc-perm-display-item {
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  color: #434343;
+}
+
+/* 角色列表 */
+.kc-role-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kc-role-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) 1fr auto;
+  gap: 12px 20px;
+  align-items: center;
+  padding: 10px 14px;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  background: #fff;
+  transition: border-color 0.15s;
+}
+
+.kc-role-row:hover {
+  border-color: #d6e4ff;
+}
+
+.kc-role-row.is-system {
+  background: #fafcff;
+}
+
+.kc-role-row-title-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  line-height: 1.4;
+}
+
+.kc-role-row-key {
+  font-size: 11px;
+  color: #00000073;
+  background: #f5f5f5;
+  padding: 0 6px;
+  border-radius: 4px;
+}
+
+.kc-role-row-count {
+  font-size: 11px;
+  color: #00000073;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.kc-role-row-desc {
+  display: block;
+  font-size: 12px;
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+.kc-role-row-perms {
+  min-width: 0;
+}
+
+.kc-role-row-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* 角色弹窗权限选择 */
+.kc-perm-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  padding: 10px 12px;
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+}
+
+.kc-perm-picker-col-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #000000a6;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #eee;
+}
+
+.kc-perm-picker-col-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.kc-perm-picker-col-items .ant-checkbox-wrapper {
+  font-size: 13px;
+  margin-inline-start: 0 !important;
+}
+
+/* ===== User modal ===== */
+.kc-user-form .ant-form-item,
+.kc-role-form .ant-form-item {
+  margin-bottom: 10px;
+}
+
+.kc-user-form .ant-form-item-label > label,
+.kc-role-form .ant-form-item-label > label {
+  font-size: 13px;
+  height: 28px;
+}
+
+.kc-user-role-option {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+  padding: 1px 0;
+}
+
+.kc-user-role-option-label {
+  font-weight: 500;
+}
+
+.kc-user-role-option-desc {
+  font-size: 11px;
+  color: #00000073;
+}
+
+.kc-user-role-preview {
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  margin-top: 2px;
+}
+
+.kc-user-role-preview-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.kc-user-role-preview-key {
+  font-size: 11px !important;
+  font-family: ui-monospace, monospace;
+}
+
+.kc-user-role-preview-desc {
+  display: block;
+  font-size: 12px;
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+
+.kc-user-modal .ant-modal-footer,
+.kc-role-modal .ant-modal-footer {
+  padding: 10px 20px 14px;
+  margin-top: 0;
+}
+
+@media (max-width: 900px) {
+  .kc-role-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .kc-role-row-count {
+    margin-left: 0;
+  }
+
+  .kc-perm-picker-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

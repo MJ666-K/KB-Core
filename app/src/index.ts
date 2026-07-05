@@ -25,17 +25,25 @@ import { seedSkills, seedAgents, ensureMissingSkillsFromFiles } from './db/seed'
 import { startWorker } from './pipeline/queue';
 
 import { mountApiRoutes } from './routes/index';
+import { authMiddleware } from './auth/middleware';
+import { connectRedis } from './redis/client';
+import { seedSuperAdmin } from './auth/service';
+import { seedDefaultRoles } from './auth/role-service';
 
 const app = new Hono();
 
-app.route('/', ingestRoutes);
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: Date.now() }));
+app.use('/ingest', authMiddleware);
+app.route('/', ingestRoutes);
 
 async function runManualMigrations(): Promise<void> {
   const files = [
     '../src/db/migrations/manual_add_agents_and_skills.sql',
     '../src/db/migrations/manual_add_tsvector_and_fkeys.sql',
     '../src/db/migrations/manual_add_chat_sessions.sql',
+    '../src/db/migrations/manual_add_auth.sql',
+    '../src/db/migrations/manual_add_superadmin_role.sql',
+    '../src/db/migrations/manual_add_roles.sql',
   ];
   const pgClient = (await import('pg')).default;
   const { config: cfg } = await import('./config');
@@ -73,7 +81,10 @@ async function main(): Promise<void> {
   }
 
   await runManualMigrations();
+  await connectRedis();
   await initRuntimeSettings();
+  await seedDefaultRoles();
+  await seedSuperAdmin();
   await seedSkills();
   await ensureMissingSkillsFromFiles();
   await seedAgents();
@@ -113,7 +124,7 @@ async function main(): Promise<void> {
     fetch(req, server) {
       const url = new URL(req.url);
       if (url.pathname === WS_QUERY_PATH) {
-        if (server.upgrade(req, { data: {} })) return undefined;
+        if (server.upgrade(req, { data: { userId: '', authenticated: false } })) return undefined;
         return new Response('WebSocket upgrade failed', { status: 400 });
       }
       return app.fetch(req, server);

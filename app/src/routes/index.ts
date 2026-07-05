@@ -1,4 +1,5 @@
-import type { Hono } from 'hono';
+import { Hono } from 'hono';
+import { authMiddleware, type AuthEnv } from '../auth/middleware';
 import agentsRouter from './agents';
 import skillsRouter from './skills';
 import documentsRouter from './documents';
@@ -9,20 +10,33 @@ import chatRouter from './chat';
 import sessionsRouter from './sessions';
 import settingsRouter from './settings';
 import skillMetaRouter from './skill-meta';
+import authRouter from './auth';
+import queryJobsRouter from './query-jobs';
+import usersRouter from './users';
+import rolesRouter from './roles';
 import { getSubAgentRegistry } from '../agent/sub-agent-registry';
 
 export function mountApiRoutes(app: Hono): void {
-  app.route('/api/agents', agentsRouter);
-  app.route('/api/skills', skillsRouter);
-  app.route('/api/skill-meta', skillMetaRouter);
-  app.route('/api/documents', documentsRouter);
-  app.route('/api/datasets', datasetsRouter);
-  app.route('/api/stats', statsRouter);
-  app.route('/api/models', modelsRouter);
-  app.route('/api/chat', chatRouter);
-  app.route('/api/sessions', sessionsRouter);
-  app.route('/api/settings', settingsRouter);
-  app.post('/api/reload', async (c) => {
+  app.route('/api/auth', authRouter);
+
+  const api = new Hono<AuthEnv>();
+  api.use('*', authMiddleware);
+
+  api.route('/agents', agentsRouter);
+  api.route('/skills', skillsRouter);
+  api.route('/skill-meta', skillMetaRouter);
+  api.route('/documents', documentsRouter);
+  api.route('/datasets', datasetsRouter);
+  api.route('/stats', statsRouter);
+  api.route('/models', modelsRouter);
+  api.route('/chat', chatRouter);
+  api.route('/sessions', sessionsRouter);
+  api.route('/settings', settingsRouter);
+  api.route('/query', queryJobsRouter);
+  api.route('/users', usersRouter);
+  api.route('/roles', rolesRouter);
+
+  api.post('/reload', async (c) => {
     try {
       await getSubAgentRegistry().reload();
       return c.json({ ok: true });
@@ -30,4 +44,6 @@ export function mountApiRoutes(app: Hono): void {
       return c.json({ error: 'reload failed', detail: String(err) }, 500);
     }
   });
+
+  app.route('/api', api);
 }

@@ -2,11 +2,13 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { db } from '../db/client';
 import { chatMessages, chatSessions } from '../db/schema';
-import { asc, desc, eq, sql } from 'drizzle-orm';
+import { asc, desc, eq, sql, and } from 'drizzle-orm';
 import type { Citation } from '../db/schema/query-log';
 import type { ChatMessageMeta } from '../db/schema/chat-session';
+import type { AuthEnv } from '../auth/middleware';
+import { getAuthUser } from '../auth/middleware';
 
-const app = new Hono();
+const app = new Hono<AuthEnv>();
 
 const SESSION_TITLE_MAX = 18;
 
@@ -34,6 +36,7 @@ const messageSchema = z.object({
       kind: z.string(),
     })).optional(),
     followUpQuestions: z.array(z.string()).optional(),
+    queryJobId: z.string().optional(),
   }).optional(),
 });
 
@@ -48,10 +51,12 @@ const patchMessageSchema = z.object({
       kind: z.string(),
     })).optional(),
     followUpQuestions: z.array(z.string()).optional(),
+    queryJobId: z.string().optional(),
   }).partial().optional(),
 });
 
 app.get('/', async (c) => {
+  const user = getAuthUser(c);
   const rows = await db.select({
     id: chatSessions.id,
     title: chatSessions.title,
@@ -59,6 +64,7 @@ app.get('/', async (c) => {
     updatedAt: chatSessions.updatedAt,
   })
     .from(chatSessions)
+    .where(eq(chatSessions.userId, user.id))
     .orderBy(desc(chatSessions.updatedAt))
     .limit(200);
 
@@ -66,19 +72,23 @@ app.get('/', async (c) => {
 });
 
 app.post('/', async (c) => {
+  const user = getAuthUser(c);
   const body = createSessionSchema.safeParse(await c.req.json());
   if (!body.success) {
     return c.json({ error: 'Invalid body', detail: body.error.issues }, 400);
   }
 
   const title = body.data.title ?? titleFromQuestion(body.data.question ?? '');
-  const [session] = await db.insert(chatSessions).values({ title }).returning();
+  const [session] = await db.insert(chatSessions).values({ title, userId: user.id }).returning();
   return c.json({ session });
 });
 
 app.get('/:id', async (c) => {
+  const user = getAuthUser(c);
   const id = c.req.param('id');
-  const session = await db.query.chatSessions.findFirst({ where: eq(chatSessions.id, id) });
+  const session = await db.query.chatSessions.findFirst({
+    where: and(eq(chatSessions.id, id), eq(chatSessions.userId, user.id)),
+  });
   if (!session) return c.json({ error: 'Session not found' }, 404);
 
   const messages = await db.select({
@@ -98,13 +108,16 @@ app.get('/:id', async (c) => {
 });
 
 app.post('/:id/messages', async (c) => {
+  const user = getAuthUser(c);
   const id = c.req.param('id');
   const parsed = messageSchema.safeParse(await c.req.json());
   if (!parsed.success) {
     return c.json({ error: 'Invalid message', detail: parsed.error.issues }, 400);
   }
 
-  const session = await db.query.chatSessions.findFirst({ where: eq(chatSessions.id, id) });
+  const session = await db.query.chatSessions.findFirst({
+    where: and(eq(chatSessions.id, id), eq(chatSessions.userId, user.id)),
+  });
   if (!session) return c.json({ error: 'Session not found' }, 404);
 
   const orderRow = await db.select({
@@ -133,6 +146,7 @@ app.post('/:id/messages', async (c) => {
 });
 
 app.patch('/:id/messages/:messageId', async (c) => {
+  const user = getAuthUser(c);
   const sessionId = c.req.param('id');
   const messageId = c.req.param('messageId');
   const parsed = patchMessageSchema.safeParse(await c.req.json());
@@ -140,7 +154,9 @@ app.patch('/:id/messages/:messageId', async (c) => {
     return c.json({ error: 'Invalid message patch', detail: parsed.error.issues }, 400);
   }
 
-  const session = await db.query.chatSessions.findFirst({ where: eq(chatSessions.id, sessionId) });
+  const session = await db.query.chatSessions.findFirst({
+    where: and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, user.id)),
+  });
   if (!session) return c.json({ error: 'Session not found' }, 404);
 
   const existing = await db.query.chatMessages.findFirst({
@@ -173,8 +189,11 @@ app.patch('/:id/messages/:messageId', async (c) => {
 });
 
 app.delete('/:id', async (c) => {
+  const user = getAuthUser(c);
   const id = c.req.param('id');
-  const deleted = await db.delete(chatSessions).where(eq(chatSessions.id, id)).returning({ id: chatSessions.id });
+  const deleted = await db.delete(chatSessions)
+    .where(and(eq(chatSessions.id, id), eq(chatSessions.userId, user.id)))
+    .returning({ id: chatSessions.id });
   if (deleted.length === 0) return c.json({ error: 'Session not found' }, 404);
   return c.json({ ok: true });
 });

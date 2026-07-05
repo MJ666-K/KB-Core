@@ -38,6 +38,15 @@ const envSchema = z.object({
   embeddingCacheMax: z.coerce.number().int().positive().default(2000),
   resultCacheMax: z.coerce.number().int().positive().default(500),
   resultCacheTtlMs: z.coerce.number().int().positive().default(300_000),
+
+  jwtSecret: z.string().min(16, 'JWT_SECRET must be at least 16 chars'),
+  jwtAccessTtlSec: z.coerce.number().int().positive().default(900),
+  jwtRefreshTtlSec: z.coerce.number().int().positive().default(604_800),
+  queryJobTtlSec: z.coerce.number().int().positive().default(3600),
+  authDefaultUsername: z.string().min(1).default('admin'),
+  authDefaultPassword: z.string().min(6).default('admin123'),
+  /** 服务端永久 Token，仅用于脚本/集成，不在前端暴露 */
+  apiServiceToken: z.string().min(16).optional(),
 });
 
 const rawEnv = {
@@ -70,6 +79,13 @@ const rawEnv = {
   embeddingCacheMax: process.env.EMBEDDING_CACHE_MAX,
   resultCacheMax: process.env.RESULT_CACHE_MAX,
   resultCacheTtlMs: process.env.RESULT_CACHE_TTL_MS,
+  jwtSecret: process.env.JWT_SECRET,
+  jwtAccessTtlSec: process.env.JWT_ACCESS_TTL_SEC,
+  jwtRefreshTtlSec: process.env.JWT_REFRESH_TTL_SEC,
+  queryJobTtlSec: process.env.QUERY_JOB_TTL_SEC,
+  authDefaultUsername: process.env.AUTH_DEFAULT_USERNAME,
+  authDefaultPassword: process.env.AUTH_DEFAULT_PASSWORD,
+  apiServiceToken: process.env.API_SERVICE_TOKEN,
 };
 
 const parsed = envSchema.safeParse(rawEnv);

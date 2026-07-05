@@ -8,6 +8,8 @@ export { agents } from './agents';
 export { models } from './models';
 export { skillDefinitions } from './skill-definitions';
 export { chatSessions, chatMessages } from './chat-session';
+export { users, apiTokens } from './user';
+export { roles, rolePermissions } from './role';
 export type { Citation, ToolCallRecord } from './query-log';
 export type { ChatMessageMeta } from './chat-session';
 export type { AgentStep } from './agent-trace';
