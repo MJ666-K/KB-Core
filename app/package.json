@@ -1,5 +1,6 @@
 {
   "name": "knowledge-core",
+  "author": "2212013739@qq.com",
   "module": "src/index.ts",
   "type": "module",
   "private": true,

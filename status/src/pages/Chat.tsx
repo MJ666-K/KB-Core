@@ -52,6 +52,57 @@ const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.ho
 let idSeq = 0;
 const newId = () => `msg-${Date.now()}-${idSeq++}`;
 
+const PERSISTED_MSG_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isPersistedMessageId(id: string): boolean {
+  return PERSISTED_MSG_ID.test(id);
+}
+
+/** 从已加载消息中找到最后一条已入库的 assistant 消息 id */
+function findLastPersistedAssistantId(msgs: AgentMsg[]): string | null {
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i];
+    if (m?.role === 'assistant' && isPersistedMessageId(m.id)) return m.id;
+  }
+  return null;
+}
+
+function findLastUserIndex(msgs: AgentMsg[]): number {
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    if (msgs[i]?.role === 'user') return i;
+  }
+  return -1;
+}
+
+/** 进行中任务对应的 assistant：优先 persistedId，否则取最后一轮 user 之后的 assistant */
+function findAssistantForActiveJob(msgs: AgentMsg[], persistedId?: string | null): AgentMsg | null {
+  if (persistedId) {
+    const found = msgs.find(m => m.id === persistedId && m.role === 'assistant');
+    if (found) return found;
+  }
+  const lastUserIdx = findLastUserIndex(msgs);
+  for (let i = msgs.length - 1; i > lastUserIdx; i--) {
+    const m = msgs[i];
+    if (m?.role === 'assistant') return m;
+  }
+  return null;
+}
+
+/** 去掉最后一轮 user 之后多余的 assistant，只保留 keepId */
+function dedupeTrailingAssistants(msgs: AgentMsg[], keepId: string): AgentMsg[] {
+  const lastUserIdx = findLastUserIndex(msgs);
+  return msgs.filter((m, i) => {
+    if (i <= lastUserIdx) return true;
+    if (m.role !== 'assistant') return true;
+    return m.id === keepId;
+  });
+}
+
+function syncAssistantLocalId(localId: string, dbId: string, draft: AgentMsg | null): AgentMsg | null {
+  if (!draft || draft.id !== localId) return draft;
+  return { ...draft, id: dbId };
+}
+
 const HINTS_FALLBACK = [
   '劳动合同法关于加班工资的规定？',
   '民法典中合同解除的条件有哪些？',
@@ -91,6 +142,9 @@ function dbToAgentMsg(m: {
   meta: { latencyMs?: number; termination?: string; toolCalls?: Array<{ name: string; kind: string }>; followUpQuestions?: string[] } | null;
 }): AgentMsg {
   const meta = m.meta ?? {};
+  const isAssistant = m.role === 'assistant';
+  // 无 termination 表示回答未结束（含流式中途保存的部分内容）
+  const incomplete = isAssistant && !meta.termination;
   return {
     id: m.id,
     role: m.role === 'user' ? 'user' : 'assistant',
@@ -102,7 +156,7 @@ function dbToAgentMsg(m: {
     latencyMs: meta.latencyMs,
     termination: meta.termination,
     followUpQuestions: Array.isArray(meta.followUpQuestions) ? meta.followUpQuestions : [],
-    phase: 'done',
+    phase: incomplete ? 'writing' : 'done',
   };
 }
 
@@ -257,10 +311,26 @@ export default function Chat() {
     const draft = assistantDraftRef.current;
     if (!sid || !draft) return null;
 
-    pendingAssistantPersistRef.current = persistAssistant({ ...draft, content: '' }, sid).then(id => {
-      if (id) savedAssistantMsgIdRef.current = id;
-      return id;
-    });
+    if (!pendingAssistantPersistRef.current) {
+      const localId = assistantIdRef.current;
+      pendingAssistantPersistRef.current = persistAssistant(
+        { ...draft, content: draft.content || '' },
+        sid,
+      ).then(id => {
+        if (id) {
+          savedAssistantMsgIdRef.current = id;
+          if (localId && localId !== id) {
+            assistantIdRef.current = id;
+            assistantDraftRef.current = syncAssistantLocalId(localId, id, assistantDraftRef.current);
+            pendingAssistantRef.current = syncAssistantLocalId(localId, id, pendingAssistantRef.current);
+            setMessages(prev => prev.map(m => (m.id === localId ? { ...m, id } : m)));
+          }
+        }
+        return id;
+      }).finally(() => {
+        pendingAssistantPersistRef.current = null;
+      });
+    }
     return pendingAssistantPersistRef.current;
   }, [persistAssistant, resolveAssistantMsgId]);
 
@@ -352,18 +422,23 @@ export default function Chat() {
     assistantDraftRef.current = null;
 
     let saved: AgentMsg | undefined;
-    setMessages(prev => prev.map(msg => {
-      if (msg.id !== assistantId) return msg;
-      saved = { ...msg, ...patch, phase: patch.phase ?? 'done' } as AgentMsg;
-      return saved;
-    }));
+    setMessages(prev => {
+      const mapped = prev.map(msg => {
+        if (msg.id !== assistantId) return msg;
+        saved = { ...msg, ...patch, phase: patch.phase ?? 'done' } as AgentMsg;
+        return saved;
+      });
+      return dedupeTrailingAssistants(mapped, assistantId);
+    });
 
     if (!saved && draft) {
       saved = { ...draft, ...patch, id: assistantId, phase: patch.phase ?? 'done' } as AgentMsg;
       setMessages(prev => {
         const has = prev.some(m => m.id === assistantId);
-        if (has) return prev.map(m => (m.id === assistantId ? saved! : m));
-        return [...prev, saved!];
+        const next = has
+          ? prev.map(m => (m.id === assistantId ? saved! : m))
+          : [...prev, saved!];
+        return dedupeTrailingAssistants(next, assistantId);
       });
     }
 
@@ -444,12 +519,18 @@ export default function Chat() {
     }
     if (type === 'answer_start') {
       apply(msg => ({ ...msg, phase: 'writing' }));
-      void ensureAssistantMessage();
+      if (!savedAssistantMsgIdRef.current) {
+        void ensureAssistantMessage();
+      }
       return;
     }
     if (type === 'token' && token) {
       apply(msg => ({ ...msg, phase: 'writing', content: msg.content + token }));
-      void ensureAssistantMessage().then(() => { scheduleSyncDraft(); });
+      if (!savedAssistantMsgIdRef.current) {
+        void ensureAssistantMessage().then(() => { scheduleSyncDraft(); });
+      } else {
+        scheduleSyncDraft();
+      }
       return;
     }
     if (type === 'answer_end') return;
@@ -476,6 +557,7 @@ export default function Chat() {
       return;
     }
     if (type === 'result') {
+      if (finishedRef.current) return;
       const answer = typeof data.answer === 'string' ? data.answer : '';
       const citations = (data.citations as Citation[]) ?? [];
       const followUpQuestions = Array.isArray(data.followUpQuestions)
@@ -492,6 +574,7 @@ export default function Chat() {
       return;
     }
     if (type === 'error') {
+      if (finishedRef.current) return;
       const detail = data.detail ? `: ${JSON.stringify(data.detail)}` : '';
       finishAssistant({
         content: `❌ ${data.error as string}${detail}`,
@@ -605,6 +688,7 @@ export default function Chat() {
     sessionId: string,
     jobId: string,
     partialAnswer: string,
+    persistedAssistantId?: string | null,
   ) => {
     let eventSince = 0;
     try {
@@ -617,19 +701,30 @@ export default function Chat() {
     activeJobIdRef.current = jobId;
     querySessionIdRef.current = sessionId;
     finishedRef.current = false;
-    savedAssistantMsgIdRef.current = null;
     pendingAssistantPersistRef.current = null;
+    savedAssistantMsgIdRef.current =
+      persistedAssistantId && isPersistedMessageId(persistedAssistantId)
+        ? persistedAssistantId
+        : null;
 
     setMessages(prev => {
-      const last = prev[prev.length - 1];
-      if (last?.role === 'assistant' && last.phase !== 'done' && last.phase !== 'error') {
-        assistantIdRef.current = last.id;
-        const merged = partialAnswer.length > last.content.length
-          ? { ...last, content: partialAnswer, phase: 'writing' as MsgPhase }
-          : last;
+      const target = findAssistantForActiveJob(prev, persistedAssistantId);
+      if (target) {
+        assistantIdRef.current = target.id;
+        if (isPersistedMessageId(target.id)) {
+          savedAssistantMsgIdRef.current = target.id;
+        }
+        const content = partialAnswer.length > target.content.length ? partialAnswer : target.content;
+        const merged: AgentMsg = {
+          ...target,
+          content,
+          phase: 'writing',
+          termination: undefined,
+        };
         assistantDraftRef.current = merged;
         pendingAssistantRef.current = merged;
-        return [...prev.slice(0, -1), merged];
+        const withoutDupes = dedupeTrailingAssistants(prev, target.id);
+        return withoutDupes.map(m => (m.id === target.id ? merged : m));
       }
       const bot = emptyAssistant();
       if (partialAnswer) {
@@ -645,7 +740,9 @@ export default function Chat() {
     setLoading(true);
     setInputWhileLoading(false);
     stickToBottomRef.current = true;
-    void ensureAssistantMessage();
+    if (!savedAssistantMsgIdRef.current) {
+      void ensureAssistantMessage();
+    }
 
     connectWsWithPayload(JSON.stringify({
       type: 'resume',
@@ -681,6 +778,7 @@ export default function Chat() {
     try {
       const { messages: rows } = await api.getSession(id);
       const loaded = rows.map(dbToAgentMsg);
+      const lastPersistedAssistantId = findLastPersistedAssistantId(loaded);
       setSessionId(id);
       setMessages(loaded);
       historyRef.current = loaded.map(m => ({ role: m.role, content: m.content }));
@@ -691,7 +789,12 @@ export default function Chat() {
       try {
         const jobInfo = await api.getActiveQueryJob(id);
         if (jobInfo.active && jobInfo.jobId) {
-          await resumeActiveJob(id, jobInfo.jobId, jobInfo.partialAnswer ?? '');
+          await resumeActiveJob(
+            id,
+            jobInfo.jobId,
+            jobInfo.partialAnswer ?? '',
+            lastPersistedAssistantId,
+          );
         }
       } catch {
         /* 无进行中的查询时忽略 */
@@ -790,7 +893,6 @@ export default function Chat() {
     setInputWhileLoading(false);
     stickToBottomRef.current = true;
     void refreshSessions();
-    void ensureAssistantMessage();
 
     const payload = JSON.stringify({
       type: 'query',
@@ -800,7 +902,7 @@ export default function Chat() {
     });
 
     connectWsWithPayload(payload);
-  }, [question, loading, connectWsWithPayload, refreshSessions, navigate, setSessionId, ensureAssistantMessage]);
+  }, [question, loading, connectWsWithPayload, refreshSessions, navigate, setSessionId]);
 
   const grouped = groupSessions(sessions);
   const isDraft = activeSessionId === null && messages.length === 0;
