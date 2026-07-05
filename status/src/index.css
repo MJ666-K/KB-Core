@@ -1,0 +1,112 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #d9d9d9;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #bfbfbf;
+}
+
+.kc-page-header {
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.kc-page-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: #000000e0;
+  margin: 0 0 4px 0;
+}
+
+.kc-page-subtitle {
+  font-size: 13px;
+  color: #00000073;
+  margin: 0;
+}
+
+.kc-toolbar {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.chunk-hl {
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.chunk-hl:hover, .chunk-hl.hovered {
+  background: rgba(22, 119, 255, 0.1);
+}
+
+.chunk-hl.selected {
+  background: rgba(22, 119, 255, 0.22);
+}
+
+.chunk-hl.flash {
+  animation: chunkFlash 1.5s ease-out;
+}
+
+@keyframes chunkFlash {
+  0%   { background: rgba(22, 119, 255, 0.5); }
+  100% { background: rgba(22, 119, 255, 0); }
+}
+
+.chunk-parent {
+  border-left: 3px solid #1677ff;
+  padding-left: 4px;
+  margin-left: -4px;
+}
+
+.chunk-child {
+  border-left: 1px dashed #91caff;
+  padding-left: 2px;
+  margin-left: -2px;
+}
+
+.kc-chat-bubble-user {
+  background: #1677ff;
+  color: white;
+  padding: 10px 14px;
+  border-radius: 14px 14px 4px 14px;
+  max-width: 70%;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.kc-chat-bubble-agent {
+  background: #ffffff;
+  border: 1px solid #f0f0f0;
+  border-radius: 14px 14px 14px 4px;
+  padding: 14px 16px;
+  max-width: 85%;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.kc-stat-card {
+  text-align: center;
+  transition: box-shadow 0.2s;
+}
+
+.kc-stat-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}

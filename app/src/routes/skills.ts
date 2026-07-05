@@ -24,6 +24,7 @@ app.get('/', async (c) => {
     displayName: skillDefinitions.displayName,
     description: skillDefinitions.description,
     tools: skillDefinitions.tools,
+    instructions: skillDefinitions.instructions,
     enabled: skillDefinitions.enabled,
     version: skillDefinitions.version,
     updatedAt: skillDefinitions.updatedAt,

@@ -4,15 +4,26 @@ export class RecursiveSplitter {
   constructor(protected config: SplitConfig) {}
 
   protected splitBySeparators(text: string, seps: string[]): string[] {
-    const sep = seps.find(s => s !== '' && text.includes(s));
-    if (!sep) return [text];
+    const availableSeps = seps.filter(s => s !== '' && text.includes(s));
+    if (availableSeps.length === 0) return [text];
 
     const parts: string[] = [];
     let remaining = text;
     while (remaining.length > 0) {
-      const idx = remaining.indexOf(sep);
-      if (idx === -1) { parts.push(remaining); break; }
-      const end = idx + sep.length;
+      let earliestIdx = remaining.length;
+      let earliestSep = '';
+      for (const s of availableSeps) {
+        const idx = remaining.indexOf(s);
+        if (idx !== -1 && idx < earliestIdx) {
+          earliestIdx = idx;
+          earliestSep = s;
+        }
+      }
+      if (earliestSep === '') {
+        parts.push(remaining);
+        break;
+      }
+      const end = earliestIdx + earliestSep.length;
       parts.push(remaining.slice(0, end));
       remaining = remaining.slice(end);
     }

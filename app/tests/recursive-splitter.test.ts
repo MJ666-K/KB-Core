@@ -24,4 +24,19 @@ describe('RecursiveSplitter', () => {
     const s = new RecursiveSplitter(makeConfig({ maxChunkSize: 8 }));
     expect(s.splitRaw('这是第一句话。这是第二句话。这是第三句话。这是第四句话。').length).toBeGreaterThanOrEqual(2);
   });
+  it('混合标点按句式切割', () => {
+    const s = new RecursiveSplitter(makeConfig({ maxChunkSize: 8 }));
+    const chunks = s.splitRaw('这是第一句。这是第二句！这是第三句？这是第四句；');
+    expect(chunks.length).toBeGreaterThanOrEqual(2);
+    for (const c of chunks) {
+      const trimmed = c.trimEnd();
+      expect(trimmed).toMatch(/[。！？；]$/);
+    }
+  });
+  it('按段落优先于按标点', () => {
+    const s = new RecursiveSplitter(makeConfig({ maxChunkSize: 50 }));
+    const chunks = s.splitRaw('段落一第一句。段落一第二句。\n\n段落二内容。');
+    expect(chunks.some(c => c.includes('段落一'))).toBe(true);
+    expect(chunks.some(c => c.includes('段落二'))).toBe(true);
+  });
 });

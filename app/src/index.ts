@@ -121,6 +121,7 @@ main().catch((err) => {
 });
 
 function setupStaticServing(app: Hono): void {
-  app.get('/', serveStatic({ path: '../status/index.html' }));
-  app.get('/status/*', serveStatic({ root: '..' }));
+  app.get('/', serveStatic({ path: '../status/dist/index.html' }));
+  app.get('/assets/*', serveStatic({ root: '../status/dist' }));
+  app.use('/status-legacy/*', serveStatic({ root: '..' }));
 }
