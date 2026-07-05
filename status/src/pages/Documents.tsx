@@ -89,7 +89,8 @@ export default function Documents() {
     let success = 0, fail = 0;
     for (const f of fileList) {
       try {
-        await api.uploadDocument(f.originFileObj as File, uploadDataset);
+        const ds = datasets.find(d => d.id === uploadDataset);
+        await api.uploadDocument(f.originFileObj as File, ds?.name ?? 'default');
         success++;
         setFileList(prev => prev.map(pf => pf.uid === f.uid ? { ...pf, status: 'done' } : pf));
       } catch {

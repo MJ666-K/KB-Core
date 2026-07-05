@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { db } from '../db/client';
 import { documents, chunks, datasets as datasetsSchema } from '../db/schema';
 import { eq, and, isNull, desc, sql, inArray } from 'drizzle-orm';
-import { readFile } from 'fs/promises';
+import { readDocumentText } from '../storage/document-storage';
 import { resetDocumentForReingest, enqueueIngest } from '../pipeline/document-reset';
 import { logger } from '../utils/logger';
 
@@ -68,10 +68,11 @@ app.get('/:id/content', async (c) => {
     .from(documents).where(eq(documents.id, id));
   if (!doc) return c.json({ error: 'Document not found' }, 404);
   try {
-    const content = await readFile(doc.sourcePath, 'utf-8');
+    const content = await readDocumentText(doc.sourcePath);
     return c.text(content);
   } catch (err) {
-    return c.json({ error: 'File not found on disk' }, 404);
+    logger.error('[Documents] Failed to read content', { id, sourcePath: doc.sourcePath, err });
+    return c.json({ error: 'File not found in storage' }, 404);
   }
 });
 

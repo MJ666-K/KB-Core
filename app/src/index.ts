@@ -1,11 +1,9 @@
 import { Hono } from 'hono';
 import { serveStatic } from 'hono/bun';
-import { readFile } from 'fs/promises';
 import { config } from './config';
 import { initRuntimeSettings } from './settings/store';
-import { db } from './db/client';
-import { datasets } from './db/schema';
-import { eq } from 'drizzle-orm';
+import { runMigrations } from './db/migrate';
+import { runBaseSeed } from './db/seed/run';
 import { logger } from './utils/logger';
 
 import ingestRoutes from './routes/ingest';
@@ -21,14 +19,11 @@ import { createHookRegistry } from './hooks';
 import { QueryAgent } from './agent/query-agent';
 import { MainAgent } from './agent/main-agent';
 import { SubAgentRegistry, setSubAgentRegistry } from './agent/sub-agent-registry';
-import { seedSkills, seedAgents, ensureMissingSkillsFromFiles } from './db/seed';
 import { startWorker } from './pipeline/queue';
 
 import { mountApiRoutes } from './routes/index';
 import { authMiddleware } from './auth/middleware';
 import { connectRedis } from './redis/client';
-import { seedSuperAdmin } from './auth/service';
-import { seedDefaultRoles } from './auth/role-service';
 
 const app = new Hono();
 
@@ -36,58 +31,11 @@ app.get('/health', (c) => c.json({ status: 'ok', timestamp: Date.now() }));
 app.use('/ingest', authMiddleware);
 app.route('/', ingestRoutes);
 
-async function runManualMigrations(): Promise<void> {
-  const files = [
-    '../src/db/migrations/manual_add_agents_and_skills.sql',
-    '../src/db/migrations/manual_add_tsvector_and_fkeys.sql',
-    '../src/db/migrations/manual_add_chat_sessions.sql',
-    '../src/db/migrations/manual_add_auth.sql',
-    '../src/db/migrations/manual_add_superadmin_role.sql',
-    '../src/db/migrations/manual_add_roles.sql',
-  ];
-  const pgClient = (await import('pg')).default;
-  const { config: cfg } = await import('./config');
-
-  for (const rel of files) {
-    const migrationFile = new URL(rel, import.meta.url).pathname;
-    let sqlText: string;
-    try {
-      sqlText = await readFile(migrationFile, 'utf-8');
-    } catch {
-      logger.warn(`[Migration] ${rel} not found, skipping`);
-      continue;
-    }
-    try {
-      const client = new pgClient.Client({ connectionString: cfg.databaseUrl });
-      await client.connect();
-      await client.query(sqlText);
-      await client.end();
-      logger.info(`[Migration] ${rel} applied`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('already exists')) {
-        logger.info(`[Migration] ${rel} already applied`);
-      } else {
-        logger.error(`[Migration] ${rel} failed`, err);
-      }
-    }
-  }
-}
-
 async function main(): Promise<void> {
-  let defaultDataset = await db.query.datasets.findFirst({ where: eq(datasets.name, 'default') });
-  if (!defaultDataset) {
-    [defaultDataset] = await db.insert(datasets).values({ name: 'default' }).returning();
-  }
-
-  await runManualMigrations();
+  await runMigrations();
+  await runBaseSeed();
   await connectRedis();
   await initRuntimeSettings();
-  await seedDefaultRoles();
-  await seedSuperAdmin();
-  await seedSkills();
-  await ensureMissingSkillsFromFiles();
-  await seedAgents();
 
   const embeddingService = new EmbeddingService();
   const retriever = new HybridRetriever(embeddingService);
@@ -144,7 +92,18 @@ main().catch((err) => {
 });
 
 function setupStaticServing(app: Hono): void {
-  app.get('/', serveStatic({ path: '../status/dist/index.html' }));
-  app.get('/assets/*', serveStatic({ root: '../status/dist' }));
-  app.use('/status-legacy/*', serveStatic({ root: '..' }));
+  const staticRoot = process.env.STATIC_ROOT ?? '../status/dist';
+  app.use('/assets/*', serveStatic({ root: staticRoot }));
+
+  app.get('*', async (c) => {
+    const path = c.req.path;
+    if (path.startsWith('/api/') || path.startsWith('/ingest') || path.startsWith('/ws/') || path === '/health') {
+      return c.json({ error: 'Not Found' }, 404);
+    }
+    const indexFile = Bun.file(`${staticRoot}/index.html`);
+    if (await indexFile.exists()) {
+      return c.html(await indexFile.text());
+    }
+    return c.text('Frontend not built. Run: cd status && npm run build', 503);
+  });
 }

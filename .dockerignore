@@ -1,0 +1,19 @@
+# 部署目录运行时数据（Postgres/Redis 已改用 Docker 命名卷，不再挂载 ./db ./redis）
+deploy/data
+deploy/.env
+
+# 构建不需要的内容
+**/.git
+**/.env
+**/node_modules
+**/dist
+**/.cursor
+**/.vscode
+app/documents/*
+!app/documents/.gitkeep
+docs
+openspec
+.opencode
+data/*.txt
+status/node_modules
+status/dist

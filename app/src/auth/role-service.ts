@@ -213,18 +213,10 @@ export async function roleExists(roleKey: string): Promise<boolean> {
   return !!row;
 }
 
+/** @deprecated 使用 runBaseSeed()；保留兼容 */
 export async function seedDefaultRoles(): Promise<void> {
-  const sa = await db.query.roles.findFirst({ where: eq(roles.key, SUPERADMIN_ROLE_KEY) });
-  if (!sa) {
-    const created = await createRole({
-      key: SUPERADMIN_ROLE_KEY,
-      label: '超级管理员',
-      description: '拥有系统全部权限',
-      permissions: [...ALL_PERMISSIONS],
-    });
-    await db.update(roles).set({ isSystem: true }).where(eq(roles.id, created.id));
-  }
-  invalidateCache();
+  const { seedPresetRoles } = await import('../db/seed/run');
+  await seedPresetRoles();
 }
 
 export async function listAssignableRoles(actorPermissions: Permission[]): Promise<RoleRecord[]> {

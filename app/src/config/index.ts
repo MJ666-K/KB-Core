@@ -47,7 +47,21 @@ const envSchema = z.object({
   authDefaultPassword: z.string().min(6).default('admin123'),
   /** 服务端永久 Token，仅用于脚本/集成，不在前端暴露 */
   apiServiceToken: z.string().min(16).optional(),
-});
+
+  ossAccessKeyId: z.string().min(1).optional(),
+  ossAccessKeySecret: z.string().min(1).optional(),
+  ossEndpoint: z.string().url().optional(),
+  ossBucketName: z.string().min(1).optional(),
+  ossPrefix: z.string().default('knowledge_core/'),
+}).transform((data) => ({
+  ...data,
+  ossEnabled: Boolean(
+    data.ossAccessKeyId &&
+    data.ossAccessKeySecret &&
+    data.ossEndpoint &&
+    data.ossBucketName,
+  ),
+}));
 
 const rawEnv = {
   appPort: process.env.APP_PORT,
@@ -86,6 +100,11 @@ const rawEnv = {
   authDefaultUsername: process.env.AUTH_DEFAULT_USERNAME,
   authDefaultPassword: process.env.AUTH_DEFAULT_PASSWORD,
   apiServiceToken: process.env.API_SERVICE_TOKEN,
+  ossAccessKeyId: process.env.OSS_ACCESS_KEY_ID,
+  ossAccessKeySecret: process.env.OSS_ACCESS_KEY_SECRET,
+  ossEndpoint: process.env.OSS_ENDPOINT,
+  ossBucketName: process.env.OSS_BUCKET_NAME,
+  ossPrefix: process.env.OSS_PREFIX,
 };
 
 const parsed = envSchema.safeParse(rawEnv);

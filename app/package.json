@@ -15,6 +15,7 @@
     "chat": "bun tests/chat.ts"
   },
   "devDependencies": {
+    "@types/ali-oss": "^6.23.3",
     "@types/bun": "latest",
     "@types/marked-terminal": "^6.1.1",
     "@types/pg": "^8.20.0",
@@ -24,6 +25,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "ali-oss": "^6.23.0",
     "bullmq": "^5.79.2",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.27",

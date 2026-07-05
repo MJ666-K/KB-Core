@@ -60,10 +60,10 @@ export const api = {
     authFetch(`/api/documents/${id}`, { method: 'DELETE' }).then(r => r.ok ? r.json() : Promise.reject(new Error('删除失败'))),
   reingestDocument: (id: string) =>
     authFetch(`/api/documents/${id}/reingest`, { method: 'POST' }).then(r => r.ok ? r.json() : Promise.reject(new Error('重新嵌入失败'))),
-  uploadDocument: (file: File, datasetId?: string) => {
+  uploadDocument: (file: File, datasetName?: string) => {
     const fd = new FormData();
     fd.append('file', file);
-    if (datasetId) fd.append('datasetId', datasetId);
+    if (datasetName) fd.append('dataset', datasetName);
     return authFetch('/ingest', { method: 'POST', body: fd }).then(r => r.ok ? r.json() : Promise.reject(new Error('上传失败')));
   },
 

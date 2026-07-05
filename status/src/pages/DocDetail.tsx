@@ -4,6 +4,7 @@ import {
   Card, Row, Col, Spin, Collapse, List, Tag, message, Empty, Button, Typography, Progress, Input, Segmented,
 } from 'antd';
 import { ArrowLeftOutlined, CopyOutlined, SearchOutlined } from '@ant-design/icons';
+import { api } from '../api';
 import type { Chunk } from '../types';
 import { resolveChunkRange } from '../chunkRange';
 
@@ -58,9 +59,9 @@ export default function DocDetail() {
     if (!id) return;
     setLoading(true);
     Promise.all([
-      fetch(`/api/documents/${id}`).then(r => r.json() as Promise<{ document: DocumentMeta }>),
-      fetch(`/api/documents/${id}/chunks`).then(r => r.json() as Promise<{ chunks: Chunk[] }>),
-      fetch(`/api/documents/${id}/content`).then(r => r.text()),
+      api.getDocument(id),
+      api.getDocumentChunks(id),
+      api.getDocumentContent(id),
     ])
       .then(([d, c, orig]) => {
         setDoc(d.document);

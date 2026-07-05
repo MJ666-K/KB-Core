@@ -25,7 +25,7 @@ async function checkTsvColumn(): Promise<boolean> {
     `);
     tsvColumnExists = Boolean(res.rows[0]?.exists);
     if (!tsvColumnExists) {
-      logger.warn('[Sparse] chunks.tsv 列不存在，请执行 manual_add_tsvector_and_fkeys.sql');
+      logger.warn('[Sparse] chunks.tsv 列不存在，请执行 bun run db:migrate');
     }
   } catch (err) {
     logger.warn('[Sparse] 无法检测 tsv 列', err);

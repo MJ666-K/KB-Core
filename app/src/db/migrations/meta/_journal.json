@@ -8,6 +8,27 @@
       "when": 1782834899608,
       "tag": "0000_complete_johnny_blaze",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783275322976,
+      "tag": "0001_tearful_roughhouse",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783275400000,
+      "tag": "0002_tsvector_and_parent_fk",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1783275400001,
+      "tag": "0003_traceability_tables",
+      "breakpoints": true
     }
   ]
 }

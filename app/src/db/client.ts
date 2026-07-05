@@ -3,7 +3,7 @@ import { Pool } from 'pg';
 import * as schema from './schema';
 import { config } from '../config';
 
-const pool = new Pool({
+export const pool = new Pool({
   connectionString: config.databaseUrl,
   max: 10,
   idleTimeoutMillis: 30_000,
