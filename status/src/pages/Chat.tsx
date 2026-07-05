@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Input, Button, Card, Space, Typography, Popconfirm, message, Spin, Collapse,
+  Input, Button, Card, Typography, Popconfirm, message, Spin, Collapse,
 } from 'antd';
 import {
   SendOutlined, PaperClipOutlined, RobotOutlined, UserOutlined, LoadingOutlined,
@@ -69,6 +69,19 @@ const emptyAssistant = (): AgentMsg => ({
   phase: 'thinking',
 });
 
+function assistantPersistBody(msg: AgentMsg, contentOverride?: string) {
+  return {
+    content: sanitizeAnswerContent(contentOverride ?? msg.content),
+    citations: msg.citations ?? [],
+    meta: {
+      latencyMs: msg.latencyMs,
+      termination: msg.termination,
+      toolCalls: msg.toolCalls.map(t => ({ name: t.name, kind: t.kind })),
+      followUpQuestions: msg.followUpQuestions,
+    },
+  };
+}
+
 function dbToAgentMsg(m: {
   id: string;
   role: string;
@@ -98,7 +111,6 @@ export default function Chat() {
   const [question, setQuestion] = useState('');
   const [messages, setMessages] = useState<AgentMsg[]>([]);
   const [loading, setLoading] = useState(false);
-  const [loadingHint, setLoadingHint] = useState('正在处理...');
   const [inputWhileLoading, setInputWhileLoading] = useState(false);
   const [skillLabels, setSkillLabels] = useState<Map<string, string>>(new Map());
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -114,12 +126,15 @@ export default function Chat() {
   const assistantDraftRef = useRef<AgentMsg | null>(null);
   const finishedRef = useRef(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
   const historyRef = useRef<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
   const pendingSessionNavRef = useRef<string | null>(null);
   const pendingAssistantRef = useRef<AgentMsg | null>(null);
   const savedAssistantMsgIdRef = useRef<string | null>(null);
   const pendingAssistantPersistRef = useRef<Promise<string | null> | null>(null);
-  const assistantPersistedRef = useRef(false);
+  const syncDraftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushAssistantDraftRef = useRef<() => Promise<void>>(async () => {});
 
   const setSessionId = useCallback((id: string | null) => {
     sessionIdRef.current = id;
@@ -158,8 +173,16 @@ export default function Chat() {
       .catch(() => { /* 使用默认推荐 */ });
   }, [refreshSessions]);
 
+  const handleMessagesScroll = useCallback(() => {
+    const el = messagesScrollRef.current;
+    if (!el) return;
+    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 96;
+  }, []);
+
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    const el = messagesScrollRef.current;
+    if (!el || !stickToBottomRef.current) return;
+    el.scrollTop = el.scrollHeight;
   }, [messages]);
 
   useEffect(() => () => { wsRef.current?.close(); }, []);
@@ -171,10 +194,6 @@ export default function Chat() {
       if (msg.id !== id) return msg;
       const next = fn(msg);
       assistantDraftRef.current = next;
-      const running = next.toolCalls.find(t => !t.done);
-      if (next.phase === 'thinking' || next.phase === 'tool' || next.phase === 'writing') {
-        setLoadingHint(statusMessage(next.phase, running?.name, running?.kind));
-      }
       setInputWhileLoading(next.phase === 'writing');
       return next;
     }));
@@ -211,6 +230,98 @@ export default function Chat() {
     }
   }, []);
 
+  const resolveAssistantMsgId = useCallback(async (): Promise<string | null> => {
+    if (savedAssistantMsgIdRef.current) return savedAssistantMsgIdRef.current;
+    if (pendingAssistantPersistRef.current) {
+      return pendingAssistantPersistRef.current.catch(() => null);
+    }
+    return null;
+  }, []);
+
+  const ensureAssistantMessage = useCallback(async (): Promise<string | null> => {
+    const existing = await resolveAssistantMsgId();
+    if (existing) return existing;
+
+    const sid = querySessionIdRef.current ?? sessionIdRef.current;
+    const draft = assistantDraftRef.current;
+    if (!sid || !draft) return null;
+
+    pendingAssistantPersistRef.current = persistAssistant({ ...draft, content: '' }, sid).then(id => {
+      if (id) savedAssistantMsgIdRef.current = id;
+      return id;
+    });
+    return pendingAssistantPersistRef.current;
+  }, [persistAssistant, resolveAssistantMsgId]);
+
+  const flushAssistantDraft = useCallback(async () => {
+    if (syncDraftTimerRef.current) {
+      clearTimeout(syncDraftTimerRef.current);
+      syncDraftTimerRef.current = null;
+    }
+    const sid = querySessionIdRef.current ?? sessionIdRef.current;
+    const draft = assistantDraftRef.current;
+    if (!sid || !draft || finishedRef.current) return;
+
+    const body = assistantPersistBody(draft);
+    if (!body.content.trim()) return;
+
+    const msgId = await resolveAssistantMsgId();
+    if (!msgId) return;
+
+    try {
+      await api.updateSessionMessage(sid, msgId, body);
+    } catch {
+      /* 流式增量保存失败时静默，最终完成时会再试 */
+    }
+  }, [resolveAssistantMsgId]);
+
+  flushAssistantDraftRef.current = flushAssistantDraft;
+
+  const scheduleSyncDraft = useCallback(() => {
+    if (syncDraftTimerRef.current) clearTimeout(syncDraftTimerRef.current);
+    syncDraftTimerRef.current = setTimeout(() => {
+      syncDraftTimerRef.current = null;
+      void flushAssistantDraft();
+    }, 600);
+  }, [flushAssistantDraft]);
+
+  const finalizeAssistantPersist = useCallback(async (msg: AgentMsg, sid: string) => {
+    const body = assistantPersistBody(msg);
+    const msgId = await resolveAssistantMsgId();
+    if (msgId) {
+      try {
+        await api.updateSessionMessage(sid, msgId, body);
+        savedAssistantMsgIdRef.current = msgId;
+        void refreshSessions();
+        return msgId;
+      } catch (err) {
+        message.warning(`回答未能保存到会话：${err instanceof Error ? err.message : '未知错误'}`);
+        return null;
+      }
+    }
+    const id = await persistAssistant(msg, sid);
+    if (id) savedAssistantMsgIdRef.current = id;
+    return id;
+  }, [persistAssistant, resolveAssistantMsgId, refreshSessions]);
+
+  useEffect(() => {
+    const onBeforeUnload = () => {
+      const sid = sessionIdRef.current;
+      const msgId = savedAssistantMsgIdRef.current;
+      const draft = assistantDraftRef.current;
+      if (!sid || !msgId || !draft?.content?.trim() || finishedRef.current) return;
+      const body = assistantPersistBody(draft);
+      fetch(`/api/sessions/${sid}/messages/${msgId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        keepalive: true,
+      }).catch(() => { /* 页面卸载时尽力保存 */ });
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, []);
+
   const finishAssistant = useCallback((patch: Partial<AgentMsg> & { content: string }) => {
     const assistantId = assistantIdRef.current;
     const sid = querySessionIdRef.current ?? sessionIdRef.current;
@@ -220,7 +331,6 @@ export default function Chat() {
     pendingAssistantRef.current = null;
     setLoading(false);
     setInputWhileLoading(false);
-    setLoadingHint('正在处理...');
 
     const draft = assistantDraftRef.current;
     assistantDraftRef.current = null;
@@ -243,19 +353,17 @@ export default function Chat() {
 
     if (saved && sid) {
       historyRef.current = [...historyRef.current, { role: 'assistant', content: patch.content }];
-      if (!assistantPersistedRef.current) {
-        assistantPersistedRef.current = true;
-        const payload = { ...saved, content: sanitizeAnswerContent(patch.content) };
-        pendingAssistantPersistRef.current = persistAssistant(payload, sid).then(id => {
-          if (id) savedAssistantMsgIdRef.current = id;
-          return id;
-        });
+      if (syncDraftTimerRef.current) {
+        clearTimeout(syncDraftTimerRef.current);
+        syncDraftTimerRef.current = null;
       }
+      const payload = { ...saved, content: sanitizeAnswerContent(patch.content) };
+      pendingAssistantPersistRef.current = finalizeAssistantPersist(payload, sid).then(id => id);
     } else if (saved && !sid) {
       message.warning('回答未能保存：会话 ID 丢失');
     }
     querySessionIdRef.current = null;
-  }, [persistAssistant]);
+  }, [finalizeAssistantPersist]);
 
   const handleMsg = useCallback((data: Record<string, unknown>) => {
     const type = data.type as string;
@@ -297,10 +405,12 @@ export default function Chat() {
     }
     if (type === 'answer_start') {
       apply(msg => ({ ...msg, phase: 'writing' }));
+      void ensureAssistantMessage();
       return;
     }
     if (type === 'token' && token) {
       apply(msg => ({ ...msg, phase: 'writing', content: msg.content + token }));
+      void ensureAssistantMessage().then(() => { scheduleSyncDraft(); });
       return;
     }
     if (type === 'answer_end') return;
@@ -350,7 +460,7 @@ export default function Chat() {
       });
       return;
     }
-  }, [patchAssistant, finishAssistant, updateAssistantFollowUps]);
+  }, [patchAssistant, finishAssistant, updateAssistantFollowUps, ensureAssistantMessage, scheduleSyncDraft]);
 
   const handleMsgRef = useRef(handleMsg);
   handleMsgRef.current = handleMsg;
@@ -367,16 +477,17 @@ export default function Chat() {
       }
     };
     ws.onclose = () => {
-      if (assistantIdRef.current && !finishedRef.current) {
-        const draft = assistantDraftRef.current;
-        finishAssistant({
-          content: draft?.content || '⚠️ 连接已断开',
-          citations: draft?.citations ?? [],
-          latencyMs: draft?.latencyMs,
-          termination: draft?.termination,
-          phase: draft?.content ? 'done' : 'error',
-        });
-      }
+      if (!assistantIdRef.current || finishedRef.current) return;
+      void flushAssistantDraftRef.current();
+      const draft = assistantDraftRef.current;
+      if (!draft?.content?.trim()) return;
+      finishAssistant({
+        content: draft.content,
+        citations: draft.citations ?? [],
+        latencyMs: draft.latencyMs,
+        termination: draft.termination,
+        phase: 'done',
+      });
     };
   }, [finishAssistant, patchAssistant]);
 
@@ -494,15 +605,19 @@ export default function Chat() {
     finishedRef.current = false;
     savedAssistantMsgIdRef.current = null;
     pendingAssistantPersistRef.current = null;
-    assistantPersistedRef.current = false;
+    if (syncDraftTimerRef.current) {
+      clearTimeout(syncDraftTimerRef.current);
+      syncDraftTimerRef.current = null;
+    }
     querySessionIdRef.current = sessionId;
     setMessages(prev => [...prev, userMsg, botMsg]);
     historyRef.current = [...historyRef.current, { role: 'user', content: text }];
     setQuestion('');
     setLoading(true);
-    setLoadingHint('正在理解您的问题...');
     setInputWhileLoading(false);
+    stickToBottomRef.current = true;
     void refreshSessions();
+    void ensureAssistantMessage();
 
     const payload = JSON.stringify({
       type: 'query',
@@ -522,7 +637,7 @@ export default function Chat() {
     wsRef.current = ws;
     bindWs(ws);
     ws.onopen = () => { sendQuery(ws); };
-  }, [question, loading, bindWs, refreshSessions, navigate, setSessionId]);
+  }, [question, loading, bindWs, refreshSessions, navigate, setSessionId, ensureAssistantMessage]);
 
   const grouped = groupSessions(sessions);
   const isDraft = activeSessionId === null && messages.length === 0;
@@ -596,7 +711,11 @@ export default function Chat() {
                 <Spin />
               </div>
             )}
-            <div className={`kc-chat-messages${showIntro ? ' kc-chat-messages--intro' : ''}`}>
+            <div
+              ref={messagesScrollRef}
+              className={`kc-chat-messages${showIntro ? ' kc-chat-messages--intro' : ''}`}
+              onScroll={handleMessagesScroll}
+            >
               <div className="kc-chat-messages-inner">
                 {isDraft && !loadingSession && (
                   <div className="kc-chat-empty">
@@ -630,7 +749,7 @@ export default function Chat() {
 
           <div className="kc-chat-input-bar">
             <div className="kc-chat-input-inner">
-              <Space.Compact style={{ width: '100%' }}>
+              <div className="kc-chat-input-row">
               <TextArea
                 value={question}
                 onChange={e => setQuestion(e.target.value)}
@@ -638,18 +757,17 @@ export default function Chat() {
                 placeholder="输入法律问题，Enter 发送，Shift+Enter 换行..."
                 autoSize={{ minRows: 1, maxRows: 4 }}
                 disabled={loading && !inputWhileLoading}
-                style={{ borderRadius: '8px 0 0 8px' }}
               />
               <Button
                 type="primary"
                 icon={loading ? <LoadingOutlined /> : <SendOutlined />}
                 onClick={() => { void send(); }}
                 disabled={(loading && !inputWhileLoading) || !question.trim()}
-                style={{ height: 'auto', minHeight: 40, borderRadius: '0 8px 8px 0' }}
+                className="kc-chat-send-btn"
               >
-                {loading ? loadingHint : '发送'}
+                {loading ? '处理中' : '发送'}
               </Button>
-            </Space.Compact>
+            </div>
             </div>
             <p className="kc-chat-disclaimer">
             以上内容仅供参考，不构成法律意见。具体问题请咨询专业律师。
@@ -662,16 +780,26 @@ export default function Chat() {
   );
 }
 
-function StatusLine({ msg }: { msg: AgentMsg }) {
-  if (msg.phase === 'done' || msg.phase === 'error' || msg.phase === 'idle') return null;
-  if (msg.phase === 'writing' && msg.content) return null;
+function AgentProgress({ msg }: { msg: AgentMsg }) {
+  const isDone = msg.phase === 'done' || msg.phase === 'error' || msg.phase === 'idle';
+  if (isDone) return null;
 
+  const hasContent = msg.content.length > 0;
   const running = msg.toolCalls.find(t => !t.done);
-  const text = statusMessage(msg.phase, running?.name, running?.kind);
+  const text = msg.phase === 'thinking' || msg.phase === 'tool' || msg.phase === 'writing'
+    ? statusMessage(msg.phase, running?.name, running?.kind)
+    : '处理中...';
+  const hideStatus = msg.phase === 'writing' && hasContent;
 
   return (
-    <div className="kc-chat-status">
-      <LoadingOutlined spin /> {text}
+    <div className="kc-chat-progress">
+      <div className={`kc-chat-progress-inner${hideStatus ? ' kc-chat-progress-inner--hidden' : ''}`}>
+        <LoadingOutlined spin className="kc-chat-progress-icon" />
+        <span className="kc-chat-progress-text">{text}</span>
+      </div>
+      <div className={`kc-chat-progress-placeholder${hasContent ? ' kc-chat-progress-placeholder--hidden' : ''}`} aria-hidden="true">
+        <span /><span /><span />
+      </div>
     </div>
   );
 }
@@ -728,26 +856,22 @@ function MsgBubble({
     <div className="kc-chat-row kc-chat-row-bot">
       <div className="kc-chat-avatar kc-chat-avatar-bot"><RobotOutlined /></div>
       <div className="kc-chat-bubble-agent">
-        <StatusLine msg={msg} />
+        <AgentProgress msg={msg} />
 
         {isDone && <DoneActions msg={msg} skillLabels={skillLabels} />}
 
-        {!msg.content && !isDone ? (
-          <div className="kc-chat-answer-skeleton" aria-hidden="true">
-            <span /><span /><span />
-          </div>
-        ) : null}
-
-        {msg.content ? (
-          <div className="kc-chat-answer">
-            {msg.phase === 'error' ? (
-              <span>{msg.content}</span>
-            ) : (
-              <MarkdownContent content={msg.content} />
-            )}
-            {msg.phase === 'writing' && <span className="kc-chat-cursor">▍</span>}
-          </div>
-        ) : null}
+        <div className={`kc-chat-answer-area${!msg.content && !isDone ? ' kc-chat-answer-area--empty' : ''}`}>
+          {msg.content ? (
+            <div className="kc-chat-answer">
+              {msg.phase === 'error' ? (
+                <span>{msg.content}</span>
+              ) : (
+                <MarkdownContent content={msg.content} />
+              )}
+              {msg.phase === 'writing' && <span className="kc-chat-cursor">▍</span>}
+            </div>
+          ) : null}
+        </div>
 
         {msg.citations.length > 0 && (
           <Collapse

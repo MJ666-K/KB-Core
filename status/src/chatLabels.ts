@@ -1,6 +1,6 @@
 /** 不在 UI 展示的内部步骤（仍正常执行，仅隐藏标签与专属状态文案） */
 export const HIDDEN_UI_ACTIONS = new Set([
-  'call_agent', 'qa', 'search_knowledge', 'search',
+  'call_agent', 'qa', 'search_knowledge', 'search', 'multihop',
 ]);
 
 export function shouldShowAction(name: string): boolean {
@@ -39,8 +39,10 @@ export function statusMessage(
     if (runningAction === 'search_knowledge' || runningAction === 'search') {
       return '正在检索相关法律资料...';
     }
-    if (runningAction && !shouldShowAction(runningAction)) return '正在处理...';
     if (runningAction === 'call_agent') return '正在请专家分析...';
+    if (runningAction === 'multihop' || runningAction === 'summary' || runningAction === 'compare') {
+      return '正在整理回答...';
+    }
     if (kind === 'skill' || runningAction === 'chat' || runningAction === 'qa') return '正在整理回答...';
     return '正在处理...';
   }
