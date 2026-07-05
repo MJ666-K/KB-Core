@@ -32,27 +32,35 @@ app.route('/', ingestRoutes);
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: Date.now() }));
 
 async function runManualMigrations(): Promise<void> {
-  const migrationFile = new URL('../src/db/migrations/manual_add_agents_and_skills.sql', import.meta.url).pathname;
-  let sqlText: string;
-  try {
-    sqlText = await readFile(migrationFile, 'utf-8');
-  } catch {
-    logger.warn('[Migration] manual SQL file not found, skipping');
-    return;
-  }
-  try {
-    const pgClient = (await import('pg')).default;
-    const client = new pgClient.Client({ connectionString: (await import('./config')).config.databaseUrl });
-    await client.connect();
-    await client.query(sqlText);
-    await client.end();
-    logger.info('[Migration] manual_add_agents_and_skills applied');
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('already exists')) {
-      logger.info('[Migration] manual tables already exist');
-    } else {
-      logger.error('[Migration] manual_add_agents_and_skills failed', err);
+  const files = [
+    '../src/db/migrations/manual_add_agents_and_skills.sql',
+    '../src/db/migrations/manual_add_tsvector_and_fkeys.sql',
+  ];
+  const pgClient = (await import('pg')).default;
+  const { config: cfg } = await import('./config');
+
+  for (const rel of files) {
+    const migrationFile = new URL(rel, import.meta.url).pathname;
+    let sqlText: string;
+    try {
+      sqlText = await readFile(migrationFile, 'utf-8');
+    } catch {
+      logger.warn(`[Migration] ${rel} not found, skipping`);
+      continue;
+    }
+    try {
+      const client = new pgClient.Client({ connectionString: cfg.databaseUrl });
+      await client.connect();
+      await client.query(sqlText);
+      await client.end();
+      logger.info(`[Migration] ${rel} applied`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('already exists')) {
+        logger.info(`[Migration] ${rel} already applied`);
+      } else {
+        logger.error(`[Migration] ${rel} failed`, err);
+      }
     }
   }
 }

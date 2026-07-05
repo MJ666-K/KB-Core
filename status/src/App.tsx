@@ -29,7 +29,7 @@ const menuItems = [
   { key: '/skills', icon: <ToolOutlined />, label: 'Skills', title: 'Skills', subtitle: 'Agent 高级任务单元' },
   { key: '/documents', icon: <FileTextOutlined />, label: '文档库', title: '文档库', subtitle: '上传 · 刷新 · 重新嵌入 · 删除' },
   { key: '/chat', icon: <MessageOutlined />, label: '法律助手', title: '法律助手', subtitle: '流式对话 · 子智能体路由' },
-  { key: '/settings', icon: <SettingOutlined />, label: '参数配置', title: '参数配置', subtitle: '切割参数 · 问答检索参数' },
+  { key: '/settings', icon: <SettingOutlined />, label: '参数配置', title: '参数配置', subtitle: '检索流水线 · 文本切割' },
 ];
 
 export default function App() {

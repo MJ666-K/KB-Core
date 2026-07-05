@@ -1,7 +1,7 @@
 import type { SkillContext, SkillResult } from './types';
 import type { FunctionDefinition, Message } from '../llm/llm-service';
 import type { RetrievalResult } from '../retrieve/retriever';
-import { formatCitations, deduplicateChunks, formatToolResultContent, isRetrievalResults, RETRIEVAL_FINAL_HINT, NO_RETRIEVAL_FINAL_HINT } from './types';
+import { formatCitations, deduplicateChunks, formatToolResultContent, isRetrievalResults, RETRIEVAL_FINAL_HINT, NO_RETRIEVAL_FINAL_HINT, buildSkillSystemPrompt } from './types';
 import { logger } from '../utils/logger';
 
 const MAX_SKILL_ITERATIONS = 3;
@@ -36,7 +36,7 @@ export class SkillExecutor {
     });
 
     const messages: Message[] = [
-      { role: 'system', content: instructions },
+      { role: 'system', content: buildSkillSystemPrompt(instructions) },
       { role: 'user', content: this.formatParams(ctx.params) },
     ];
 
@@ -49,6 +49,7 @@ export class SkillExecutor {
 
       const tokenBuffer: string[] = [];
       let toolCalls: import('../llm/llm-service').ToolCall[] | undefined;
+      let answerStarted = false;
 
       const hasRetrieval = allRetrievalResults.length > 0;
       const iterMessages = isLastIter && messages.length > 2
@@ -64,8 +65,16 @@ export class SkillExecutor {
         tool_choice: hasTools ? 'auto' : undefined,
         temperature: 0.3,
       })) {
-        if (chunk.type === 'token') {
+        if (chunk.type === 'token' && chunk.content) {
           tokenBuffer.push(chunk.content);
+          // 工具调用轮通常无文本 token；有 token 即视为最终回答，实时转发
+          if (ctx.events) {
+            if (!answerStarted) {
+              ctx.events.emit({ type: 'answer_start' });
+              answerStarted = true;
+            }
+            ctx.events.emit({ type: 'answer_token', token: chunk.content });
+          }
         } else if (chunk.type === 'done') {
           toolCalls = chunk.tool_calls;
         }
@@ -79,15 +88,8 @@ export class SkillExecutor {
           answerLen: answerText.length,
         });
 
-        if (ctx.events) {
-          ctx.events.emit({ type: 'answer_start' });
-          const batchSize = 2;
-          for (let i = 0; i < tokenBuffer.length; i += batchSize) {
-            const batch = tokenBuffer.slice(i, i + batchSize).join('');
-            ctx.events.emit({ type: 'answer_token', token: batch });
-            await new Promise<void>(resolve => setTimeout(resolve, 20));
-          }
-          ctx.events.emit({ type: 'answer_end' });
+        if (answerStarted) {
+          ctx.events?.emit({ type: 'answer_end' });
         }
 
         const deduped = deduplicateChunks(allRetrievalResults);
@@ -140,17 +142,12 @@ export class SkillExecutor {
 
     const tokenBuffer: string[] = [];
     for await (const chunk of ctx.llm.chatStream({ messages, temperature: 0.3 })) {
-      if (chunk.type === 'token') {
+      if (chunk.type === 'token' && chunk.content) {
         tokenBuffer.push(chunk.content);
+        ctx.events.emit({ type: 'answer_token', token: chunk.content });
       }
     }
 
-    const batchSize = 2;
-    for (let i = 0; i < tokenBuffer.length; i += batchSize) {
-      const batch = tokenBuffer.slice(i, i + batchSize).join('');
-      ctx.events.emit({ type: 'answer_token', token: batch });
-      await new Promise<void>(resolve => setTimeout(resolve, 20));
-    }
     ctx.events.emit({ type: 'answer_end' });
     return tokenBuffer.join('');
   }

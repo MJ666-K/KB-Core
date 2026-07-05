@@ -1,32 +1,322 @@
 import { useEffect, useState } from 'react';
 import {
-  Card, Form, InputNumber, Button, message, Typography, Row, Col, Space, Divider, Tag, Spin,
+  Card, Form, InputNumber, Button, message, Typography, Space, Spin, Tabs, Tooltip,
 } from 'antd';
-import { SaveOutlined, ReloadOutlined, ScissorOutlined, SearchOutlined } from '@ant-design/icons';
+import {
+  SaveOutlined, ReloadOutlined, ScissorOutlined, SearchOutlined,
+  ThunderboltOutlined, ArrowRightOutlined, QuestionCircleOutlined,
+  DownOutlined, ApiOutlined,
+} from '@ant-design/icons';
 import { api } from '../api';
 
-interface SettingsPayload {
-  settings: {
-    chunk: { parentTokens: number; childTokens: number; overlapTokens: number };
-    query: {
-      searchTopK: number;
-      denseTopKMultiplier: number;
-      rrfK: number;
-      rerankTopK: number;
-      denseMinSimilarity: number;
-      rerankMinScore: number;
-      agentMaxIterations: number;
-      agentMaxToolCalls: number;
-      resultCacheTtlMs: number;
-    };
-  };
+interface ChunkSettings {
+  parentTokens: number;
+  childTokens: number;
+  overlapTokens: number;
 }
 
-const fieldGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 };
+interface QuerySettings {
+  searchTopK: number;
+  denseTopKMultiplier: number;
+  rrfK: number;
+  rerankTopK: number;
+  denseMinSimilarity: number;
+  rerankMinScore: number;
+  agentMaxIterations: number;
+  agentMaxToolCalls: number;
+  resultCacheTtlMs: number;
+}
+
+const LEGAL_RAG_PRESET: QuerySettings = {
+  searchTopK: 10,
+  denseTopKMultiplier: 2,
+  rrfK: 60,
+  rerankTopK: 20,
+  denseMinSimilarity: 0.65,
+  rerankMinScore: 0.5,
+  agentMaxIterations: 5,
+  agentMaxToolCalls: 15,
+  resultCacheTtlMs: 300_000,
+};
+
+function formatCacheTtl(ms: number | undefined): string {
+  if (!ms || ms <= 0) return '';
+  if (ms % 60_000 === 0) return `≈ ${ms / 60_000} 分钟`;
+  if (ms % 1000 === 0) return `≈ ${ms / 1000} 秒`;
+  return '';
+}
+
+function FieldLabel({ label, tip }: { label: string; tip?: string }) {
+  if (!tip) return <span>{label}</span>;
+  return (
+    <span className="kc-settings-label">
+      {label}
+      <Tooltip title={tip}>
+        <QuestionCircleOutlined className="kc-settings-label-tip" />
+      </Tooltip>
+    </span>
+  );
+}
+
+function estChildrenPerParent(parent: number, child: number, overlap: number): number {
+  const step = Math.max(1, child - overlap);
+  if (parent <= child) return 1;
+  return Math.max(1, Math.ceil((parent - child) / step) + 1);
+}
+
+function estParentRange(childRecall: number, cpp: number): { lo: number; hi: number } {
+  const hi = childRecall;
+  const lo = Math.max(1, Math.ceil(childRecall / cpp));
+  return { lo, hi: Math.max(lo, hi) };
+}
+
+function PipeChip({
+  label,
+  value,
+  tone = 'default',
+}: {
+  label: string;
+  value: string | number;
+  tone?: 'default' | 'accent' | 'out';
+}) {
+  return (
+    <div className={`kc-pipe-chip kc-pipe-chip-${tone}`}>
+      <span className="kc-pipe-chip-label">{label}</span>
+      <span className="kc-pipe-chip-value">{value}</span>
+    </div>
+  );
+}
+
+function PipelinePreview({
+  query,
+  chunk,
+}: {
+  query: Partial<QuerySettings>;
+  chunk: Partial<ChunkSettings>;
+}) {
+  const parentTopK = query.searchTopK ?? 10;
+  const mult = query.denseTopKMultiplier ?? 3;
+  const childRecall = parentTopK * mult;
+  const rerankChild = Math.min(query.rerankTopK ?? 20, childRecall * 2);
+  const rerankMin = query.rerankMinScore ?? 0.5;
+
+  const parentTokens = chunk.parentTokens ?? 600;
+  const childTokens = chunk.childTokens ?? 200;
+  const overlapTokens = chunk.overlapTokens ?? 30;
+  const cpp = estChildrenPerParent(parentTokens, childTokens, overlapTokens);
+  const parentEst = estParentRange(childRecall, cpp);
+
+  const parentEstLabel = parentEst.lo === parentEst.hi
+    ? `${parentEst.lo}`
+    : `${parentEst.lo}~${Math.min(parentEst.hi, parentTopK)}`;
+
+  return (
+    <div className="kc-pipe">
+      {/* 子块轨 */}
+      <div className="kc-pipe-lane kc-pipe-lane-child">
+        <div className="kc-pipe-lane-head">
+          <span className="kc-pipe-lane-icon kc-pipe-lane-icon-child">
+            <SearchOutlined />
+          </span>
+          <div className="kc-pipe-lane-title">
+            <span>子块检索</span>
+            <span className="kc-pipe-lane-sub">{childTokens} token · 嵌入 · 召回单元</span>
+          </div>
+          <div className="kc-pipe-blocks kc-pipe-blocks-child" aria-hidden>
+            {[0, 1, 2].map(i => <span key={i} className="kc-pipe-block kc-pipe-block-sm" />)}
+          </div>
+        </div>
+        <div className="kc-pipe-track">
+          <div className="kc-pipe-fork">
+            <PipeChip label="Dense" value={childRecall} />
+            <span className="kc-pipe-fork-plus">+</span>
+            <PipeChip label="Sparse" value={childRecall} />
+          </div>
+          <ArrowRightOutlined className="kc-pipe-arrow" />
+          <PipeChip label="RRF" value="融合" />
+          <ArrowRightOutlined className="kc-pipe-arrow" />
+          <PipeChip label="Rerank" value={rerankChild} />
+          <ArrowRightOutlined className="kc-pipe-arrow" />
+          <PipeChip label="过滤" value={`≥${rerankMin}`} />
+        </div>
+      </div>
+
+      {/* 去重桥 */}
+      <div className="kc-pipe-bridge">
+        <div className="kc-pipe-bridge-rail" />
+        <div className="kc-pipe-bridge-badge">
+          <DownOutlined />
+          <span>Parent 去重</span>
+          <span className="kc-pipe-bridge-meta">约 {cpp} 子块 → 1 父块</span>
+        </div>
+        <div className="kc-pipe-bridge-rail" />
+      </div>
+
+      {/* 父块轨 */}
+      <div className="kc-pipe-lane kc-pipe-lane-parent">
+        <div className="kc-pipe-lane-head">
+          <span className="kc-pipe-lane-icon kc-pipe-lane-icon-parent">
+            <ApiOutlined />
+          </span>
+          <div className="kc-pipe-lane-title">
+            <span>父块输出</span>
+            <span className="kc-pipe-lane-sub">{parentTokens} token · 送入 LLM 的上下文</span>
+          </div>
+          <div className="kc-pipe-blocks kc-pipe-blocks-parent" aria-hidden>
+            <span className="kc-pipe-block kc-pipe-block-lg" />
+          </div>
+        </div>
+        <div className="kc-pipe-track">
+          <PipeChip label="去重合并" value={`≈${parentEstLabel}`} tone="accent" />
+          <ArrowRightOutlined className="kc-pipe-arrow" />
+          <PipeChip label="LLM 上下文" value={parentTopK} tone="out" />
+        </div>
+      </div>
+
+      <div className="kc-pipe-foot">
+        子块粗召回 <strong>{childRecall}</strong> 条
+        <span className="kc-pipe-foot-sep">→</span>
+        约 <strong>{parentEstLabel}</strong> 父块
+        <span className="kc-pipe-foot-sep">→</span>
+        最终 <strong>{parentTopK}</strong> 段给模型
+      </div>
+    </div>
+  );
+}
+
+function ChunkTab({ form }: { form: ReturnType<typeof Form.useForm<ChunkSettings>>[0] }) {
+  return (
+    <Form form={form} layout="vertical" requiredMark={false} size="middle" className="kc-settings-form">
+      <div className="kc-settings-fields kc-settings-fields-3">
+        <Form.Item
+          name="parentTokens"
+          label={<FieldLabel label="父块 Token" tip="检索命中后返回的上下文窗口" />}
+          rules={[{ required: true }]}
+        >
+          <InputNumber min={100} max={8000} style={{ width: '100%' }} />
+        </Form.Item>
+        <Form.Item
+          name="childTokens"
+          label={<FieldLabel label="子块 Token" tip="向量化与检索的基本单元" />}
+          rules={[{ required: true }]}
+        >
+          <InputNumber min={50} max={2000} style={{ width: '100%' }} />
+        </Form.Item>
+        <Form.Item
+          name="overlapTokens"
+          label={<FieldLabel label="重叠 Token" tip="相邻子块重叠，避免语义截断" />}
+          rules={[{ required: true }]}
+        >
+          <InputNumber min={0} max={500} style={{ width: '100%' }} />
+        </Form.Item>
+      </div>
+      <Typography.Text type="secondary" className="kc-settings-tab-hint">
+        仅对新入库 / 重新嵌入的文档生效
+      </Typography.Text>
+    </Form>
+  );
+}
+
+function QueryTab({
+  form,
+  chunk,
+  onApplyPreset,
+}: {
+  form: ReturnType<typeof Form.useForm<QuerySettings>>[0];
+  chunk: Partial<ChunkSettings>;
+  onApplyPreset: () => void;
+}) {
+  const watched = Form.useWatch([], form) as Partial<QuerySettings> | undefined;
+  const cacheHint = formatCacheTtl(watched?.resultCacheTtlMs);
+
+  return (
+    <Form form={form} layout="vertical" requiredMark={false} size="middle" className="kc-settings-form">
+      <PipelinePreview query={watched ?? {}} chunk={chunk} />
+
+      <div className="kc-settings-group">
+        <div className="kc-settings-group-head">召回</div>
+        <div className="kc-settings-fields kc-settings-fields-4">
+          <Form.Item
+            name="searchTopK"
+            label={<FieldLabel label="父块 Top K" tip="最终送入 LLM 的父块段落数（非子块数）" />}
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={1} max={100} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item
+            name="denseTopKMultiplier"
+            label={<FieldLabel label="子块扩展倍数" tip="子块级粗召回 = 父块 Top K × 倍数。因多个子块同属一个父块，倍数 2~3 即可，不必过大" />}
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={1} max={20} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="rrfK" label={<FieldLabel label="RRF K" tip="融合平滑常数，推荐 60" />} rules={[{ required: true }]}>
+            <InputNumber min={1} max={200} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="rerankTopK" label={<FieldLabel label="Rerank 候选" tip="精排的子块候选数（去重前）" />} rules={[{ required: true }]}>
+            <InputNumber min={1} max={100} style={{ width: '100%' }} />
+          </Form.Item>
+        </div>
+      </div>
+
+      <div className="kc-settings-group">
+        <div className="kc-settings-group-head">
+          过滤
+          <Typography.Text type="secondary" className="kc-settings-group-sub">
+            Dense 仅扩大召回，最终只看 Rerank 分数
+          </Typography.Text>
+        </div>
+        <div className="kc-settings-fields kc-settings-fields-2">
+          <Form.Item
+            name="denseMinSimilarity"
+            label={<FieldLabel label="Dense 召回阈值" tip="仅 SQL 粗召回，不参与最终过滤。推荐 0.60~0.65" />}
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={0} max={1} step={0.05} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item
+            name="rerankMinScore"
+            label={<FieldLabel label="Rerank 最低分" tip="唯一最终过滤阈值；为空时由模型自行分析" />}
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={0} max={1} step={0.05} style={{ width: '100%' }} />
+          </Form.Item>
+        </div>
+      </div>
+
+      <div className="kc-settings-group">
+        <div className="kc-settings-group-head">Agent / 缓存</div>
+        <div className="kc-settings-fields kc-settings-fields-3">
+          <Form.Item name="agentMaxIterations" label="最大迭代" rules={[{ required: true }]}>
+            <InputNumber min={1} max={20} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="agentMaxToolCalls" label="Tool 上限" rules={[{ required: true }]}>
+            <InputNumber min={1} max={50} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item
+            name="resultCacheTtlMs"
+            label={<FieldLabel label="缓存 TTL (ms)" tip={cacheHint || '相同 query 在 TTL 内返回缓存'} />}
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={1000} max={3_600_000} step={1000} style={{ width: '100%' }} />
+          </Form.Item>
+        </div>
+      </div>
+
+      <div className="kc-settings-tab-actions">
+        <Button type="link" icon={<ThunderboltOutlined />} onClick={onApplyPreset} size="small">
+          填入法律 RAG 推荐值
+        </Button>
+      </div>
+    </Form>
+  );
+}
 
 export default function Settings() {
-  const [chunkForm] = Form.useForm();
-  const [queryForm] = Form.useForm();
+  const [chunkForm] = Form.useForm<ChunkSettings>();
+  const [queryForm] = Form.useForm<QuerySettings>();
+  const chunkWatched = Form.useWatch([], chunkForm) as Partial<ChunkSettings> | undefined;
+  const [activeTab, setActiveTab] = useState('query');
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -35,7 +325,7 @@ export default function Settings() {
     if (!initialLoading) setRefreshing(true);
     api.getSettings()
       .then((data) => {
-        const s = data.settings as SettingsPayload['settings'];
+        const s = data.settings as { chunk: ChunkSettings; query: QuerySettings };
         chunkForm.setFieldsValue(s.chunk);
         queryForm.setFieldsValue(s.query);
       })
@@ -64,114 +354,55 @@ export default function Settings() {
     }
   };
 
+  const applyLegalPreset = () => {
+    queryForm.setFieldsValue(LEGAL_RAG_PRESET);
+    message.info('已填入推荐值，请保存');
+  };
+
+  const tabItems = [
+    {
+      key: 'query',
+      label: (
+        <span className="kc-settings-tab-label">
+          <SearchOutlined /> 检索流水线
+        </span>
+      ),
+      children: <QueryTab form={queryForm} chunk={chunkWatched ?? {}} onApplyPreset={applyLegalPreset} />,
+    },
+    {
+      key: 'chunk',
+      label: (
+        <span className="kc-settings-tab-label">
+          <ScissorOutlined /> 文本切割
+        </span>
+      ),
+      children: <ChunkTab form={chunkForm} />,
+    },
+  ];
+
   return (
     <div className="kc-settings">
-      <Card bordered={false} styles={{ body: { padding: '20px 24px 24px' } }}>
+      <Card bordered={false} className="kc-settings-card" styles={{ body: { padding: '16px 20px 12px' } }}>
         <div className="kc-settings-toolbar">
-          <Space direction="vertical" size={2}>
-            <Typography.Text strong style={{ fontSize: 15 }}>系统参数</Typography.Text>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              切割参数影响新入库 / 重新嵌入；问答参数保存后立即生效
-            </Typography.Text>
-          </Space>
-          <Space size={12}>
-            <Button icon={<ReloadOutlined />} onClick={load} loading={refreshing} disabled={initialLoading || saving}>
+          <Typography.Text strong>参数配置</Typography.Text>
+          <Space size={8}>
+            <Button size="small" icon={<ReloadOutlined />} onClick={load} loading={refreshing} disabled={initialLoading || saving}>
               重新加载
             </Button>
-            <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save} size="middle" disabled={initialLoading}>
-              保存配置
+            <Button size="small" type="primary" icon={<SaveOutlined />} loading={saving} onClick={save} disabled={initialLoading}>
+              保存
             </Button>
           </Space>
         </div>
 
         <Spin spinning={initialLoading}>
-          <div className="kc-settings-body" style={{ minHeight: initialLoading ? 320 : undefined }}>
-        <Row gutter={[20, 20]}>
-          <Col xs={24} xl={10}>
-            <div className="kc-settings-section">
-              <div className="kc-settings-section-head">
-                <ScissorOutlined className="kc-settings-section-icon" style={{ color: '#1677ff', background: '#e6f4ff' }} />
-                <div>
-                  <Typography.Text strong>切割参数</Typography.Text>
-                  <div><Tag color="blue" style={{ marginTop: 4 }}>入库时生效</Tag></div>
-                </div>
-              </div>
-              <Form form={chunkForm} layout="vertical" requiredMark="optional">
-                <div style={fieldGrid}>
-                  <Form.Item name="parentTokens" label="父块最大 Token" rules={[{ required: true }]}>
-                    <InputNumber min={100} max={8000} style={{ width: '100%' }} placeholder="如 1024" />
-                  </Form.Item>
-                  <Form.Item name="childTokens" label="子块最大 Token" rules={[{ required: true }]}>
-                    <InputNumber min={50} max={2000} style={{ width: '100%' }} placeholder="如 256" />
-                  </Form.Item>
-                  <Form.Item name="overlapTokens" label="子块重叠 Token" rules={[{ required: true }]}>
-                    <InputNumber min={0} max={500} style={{ width: '100%' }} placeholder="如 32" />
-                  </Form.Item>
-                </div>
-              </Form>
-            </div>
-          </Col>
-
-          <Col xs={24} xl={14}>
-            <div className="kc-settings-section">
-              <div className="kc-settings-section-head">
-                <SearchOutlined className="kc-settings-section-icon" style={{ color: '#52c41a', background: '#f6ffed' }} />
-                <div>
-                  <Typography.Text strong>问答 / 检索参数</Typography.Text>
-                  <div><Tag color="green" style={{ marginTop: 4 }}>即时生效</Tag></div>
-                </div>
-              </div>
-              <Form form={queryForm} layout="vertical" requiredMark="optional">
-                <div style={fieldGrid}>
-                  <Form.Item name="searchTopK" label="检索 Top K" rules={[{ required: true }]}>
-                    <InputNumber min={1} max={100} style={{ width: '100%' }} />
-                  </Form.Item>
-                  <Form.Item name="denseTopKMultiplier" label="Dense 扩展倍数" rules={[{ required: true }]}>
-                    <InputNumber min={1} max={20} style={{ width: '100%' }} />
-                  </Form.Item>
-                  <Form.Item name="rrfK" label="RRF 常数 K" rules={[{ required: true }]}>
-                    <InputNumber min={1} max={200} style={{ width: '100%' }} />
-                  </Form.Item>
-                  <Form.Item name="rerankTopK" label="Rerank 候选数" rules={[{ required: true }]}>
-                    <InputNumber min={1} max={100} style={{ width: '100%' }} />
-                  </Form.Item>
-                  <Form.Item name="denseMinSimilarity" label="向量召回最低相似度" rules={[{ required: true }]} tooltip="0~1，低于此值的 dense 结果丢弃">
-                    <InputNumber min={0} max={1} step={0.05} style={{ width: '100%' }} />
-                  </Form.Item>
-                  <Form.Item name="rerankMinScore" label="Rerank 最低分数" rules={[{ required: true }]} tooltip="0~1，重排序后低于此值的结果丢弃">
-                    <InputNumber min={0} max={1} step={0.05} style={{ width: '100%' }} />
-                  </Form.Item>
-                  <Form.Item name="agentMaxIterations" label="Agent 最大迭代" rules={[{ required: true }]}>
-                    <InputNumber min={1} max={20} style={{ width: '100%' }} />
-                  </Form.Item>
-                  <Form.Item name="agentMaxToolCalls" label="单次最大 Tool 调用" rules={[{ required: true }]}>
-                    <InputNumber min={1} max={50} style={{ width: '100%' }} />
-                  </Form.Item>
-                  <Form.Item name="resultCacheTtlMs" label="结果缓存 TTL (ms)" rules={[{ required: true }]} style={{ gridColumn: '1 / -1', maxWidth: 320 }}>
-                    <InputNumber min={1000} max={3600000} step={1000} style={{ width: '100%' }} />
-                  </Form.Item>
-                </div>
-              </Form>
-            </div>
-          </Col>
-        </Row>
-
-        <Divider style={{ margin: '20px 0 16px' }} />
-
-        <div className="kc-settings-footer">
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            修改后请点击「保存配置」；「重新加载」会丢弃未保存的更改并从服务器读取最新值。
-          </Typography.Text>
-          <Space size={12}>
-            <Button icon={<ReloadOutlined />} onClick={load} loading={refreshing} disabled={initialLoading || saving}>
-              重新加载
-            </Button>
-            <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save} disabled={initialLoading}>
-              保存配置
-            </Button>
-          </Space>
-        </div>
-          </div>
+          <Tabs
+            activeKey={activeTab}
+            onChange={setActiveTab}
+            items={tabItems}
+            className="kc-settings-tabs"
+            size="middle"
+          />
         </Spin>
       </Card>
     </div>

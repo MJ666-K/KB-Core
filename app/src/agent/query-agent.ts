@@ -268,18 +268,13 @@ export class QueryAgent {
       const tokenBuffer: string[] = [];
       const synthStart = Date.now();
       for await (const chunk of this.llm.chatStream({ messages: [...messages, { role: 'user', content: '请基于以上检索到的资料，给出最终回答。' }], ...this.buildModelChatOptions() })) {
-        if (chunk.type === 'token') {
+        if (chunk.type === 'token' && chunk.content) {
           tokenBuffer.push(chunk.content);
+          events.emit({ type: 'answer_token', token: chunk.content });
         }
       }
       logger.debug(`[Agent:LLM] synthesis 完成 (${Date.now() - synthStart}ms)`, { answerLen: tokenBuffer.join('').length });
 
-      const batchSize = 2;
-      for (let i = 0; i < tokenBuffer.length; i += batchSize) {
-        const batch = tokenBuffer.slice(i, i + batchSize).join('');
-        events.emit({ type: 'answer_token', token: batch });
-        await new Promise<void>(resolve => setTimeout(resolve, 20));
-      }
       events.emit({ type: 'answer_end' });
       return { answer: tokenBuffer.join('') || '（无法生成回答）', citations: fallbackCitations, termination: 'synthesis' };
     }

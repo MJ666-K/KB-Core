@@ -9,10 +9,10 @@
     "denseTopKMultiplier": 3,
     "rrfK": 60,
     "rerankTopK": 20,
-    "denseMinSimilarity": 0.7,
+    "denseMinSimilarity": 0.65,
     "rerankMinScore": 0.5,
     "agentMaxIterations": 5,
-    "agentMaxToolCalls": 10,
-    "resultCacheTtlMs": 60000
+    "agentMaxToolCalls": 15,
+    "resultCacheTtlMs": 300000
   }
 }

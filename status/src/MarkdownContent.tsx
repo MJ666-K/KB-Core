@@ -1,6 +1,5 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { compactMarkdown } from './chatLabels';
 
 interface Props {
   content: string;
@@ -8,12 +7,11 @@ interface Props {
 }
 
 export default function MarkdownContent({ content, className = 'kc-chat-md' }: Props) {
-  const md = compactMarkdown(content);
-  if (!md) return null;
+  if (!content.trim()) return null;
 
   return (
     <div className={className}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{md}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
     </div>
   );
 }

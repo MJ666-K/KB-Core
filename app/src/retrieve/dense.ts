@@ -26,7 +26,7 @@ export async function denseSearch(
   const ids = resolveDatasetIds(datasetId, datasetIds);
   if (ids.length === 0) return [];
 
-  const minSimilarity = getQuerySettings().denseMinSimilarity;
+  const minSimilarity = getQuerySettings().denseMinSimilarity; // 仅召回，不参与最终过滤
   const similarity = sql<number>`1 - (${cosineDistance(chunks.embedding, queryVec)})`;
 
   const datasetFilter = ids.length === 1

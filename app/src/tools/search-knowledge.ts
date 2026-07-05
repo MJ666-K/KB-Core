@@ -1,5 +1,6 @@
 import type { Tool, ToolContext } from './types';
 import type { HybridRetriever, RetrievalResult, RetrievalDetails } from '../retrieve/retriever';
+import { getQuerySettings } from '../settings/effective-config';
 import { logger } from '../utils/logger';
 
 let retrieverInstance: HybridRetriever | null = null;
@@ -181,16 +182,26 @@ export const searchKnowledgeTool: Tool<SearchParams, RetrievalResult[]> = {
     }
 
     const elapsed = Date.now() - searchStart;
+    const q = getQuerySettings();
     logger.info(`[检索] search_knowledge 完成 (${elapsed}ms)`, {
       query: normalizedQuery.slice(0, 100),
       topK,
+      thresholds: {
+        denseMinSimilarity: q.denseMinSimilarity,
+        rerankMinScore: q.rerankMinScore,
+        denseTopKMultiplier: q.denseTopKMultiplier,
+        rrfK: q.rrfK,
+        rerankTopK: q.rerankTopK,
+      },
       denseCount: details.denseCount,
       sparseCount: details.sparseCount,
       rrfCount: details.rrfCount,
       rerankCount: details.rerankCount,
       rerankFallback: details.rerankFallback,
       finalResults: results.length,
-      topScores: details.candidates.slice(0, 3).map(c => `${c.chunkId.slice(0, 8)}=${c.scores.rerank ?? c.scores.rrf}`).join(', '),
+      topScores: details.candidates.slice(0, 3).map(c =>
+        `${c.chunkId.slice(0, 8)}=d:${c.scores.dense?.toFixed(3) ?? '-'} s:${c.scores.sparse?.toFixed(2) ?? '-'} r:${c.scores.rerank?.toFixed(3) ?? c.scores.rrf.toFixed(4)}`,
+      ).join(', '),
     });
     return results;
   },

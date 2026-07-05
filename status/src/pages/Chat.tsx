@@ -3,7 +3,7 @@ import { Input, Button, Card, Space, Tag, Typography } from 'antd';
 import { SendOutlined, PaperClipOutlined, RobotOutlined, UserOutlined, LoadingOutlined } from '@ant-design/icons';
 import { api } from '../api';
 import MarkdownContent from '../MarkdownContent';
-import { actionLabel, statusMessage, aggregateCalls } from '../chatLabels';
+import { actionLabel, statusMessage, aggregateCalls, shouldShowAction } from '../chatLabels';
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -334,7 +334,8 @@ function MsgBubble({ msg, skillLabels }: { msg: AgentMsg; skillLabels: Map<strin
   }
 
   const isDone = msg.phase === 'done' || msg.phase === 'error';
-  const totalCalls = msg.toolCalls.length;
+  const visibleCalls = msg.toolCalls.filter(t => shouldShowAction(t.name));
+  const totalCalls = visibleCalls.length;
 
   return (
     <div className="kc-chat-row kc-chat-row-bot">

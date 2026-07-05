@@ -4,7 +4,8 @@ import { inArray } from 'drizzle-orm';
 import { denseSearch, type DenseHit } from './dense';
 import { sparseSearch } from './sparse';
 import { rrfFusion } from './rrf';
-import { ApiReranker, PassThroughReranker, type RerankCandidate, type Reranker } from './reranker';
+import { ApiReranker, type RerankCandidate, type Reranker } from './reranker';
+import { applyRerankFilter, buildRerankFilterLog, formatRerankFilterDocs } from './filter';
 import { EmbeddingService } from '../embedding/embedding-service';
 import { config } from '../config';
 import { getQuerySettings } from '../settings/effective-config';
@@ -88,6 +89,18 @@ export class HybridRetriever {
     const queryVec = await this.embeddingService.embedQuery(query);
     const extend = topK * q.denseTopKMultiplier;
 
+    logger.info('[检索] 召回配置', {
+      query: query.slice(0, 80),
+      topK,
+      extend,
+      denseRecallMin: q.denseMinSimilarity,
+      rerankMinScore: q.rerankMinScore,
+      denseTopKMultiplier: q.denseTopKMultiplier,
+      rrfK: q.rrfK,
+      rerankTopK: q.rerankTopK,
+      note: 'denseMin 仅用于召回，最终过滤只看 rerankMin',
+    });
+
     const [denseHits, sparseHits] = await Promise.all([
       denseSearch(queryVec, opts.datasetId, extend, opts.datasetIds),
       sparseSearch(query, opts.datasetId, extend, opts.datasetIds),
@@ -96,12 +109,34 @@ export class HybridRetriever {
     const denseMap = new Map(denseHits.map(h => [h.chunkId, h.score]));
     const sparseMap = new Map(sparseHits.map(h => [h.chunkId, h.score]));
 
+    const denseIds = new Set(denseHits.map(h => h.chunkId));
+    const sparseIds = new Set(sparseHits.map(h => h.chunkId));
+    let overlap = 0;
+    for (const id of denseIds) {
+      if (sparseIds.has(id)) overlap++;
+    }
+
+    logger.info('[检索] 召回结果', {
+      dense: denseHits.length,
+      sparse: sparseHits.length,
+      overlap,
+      denseOnly: denseHits.length - overlap,
+      sparseOnly: sparseHits.length - overlap,
+      denseTop: denseHits.slice(0, 3).map(h => `${h.chunkId.slice(0, 8)}=${h.score.toFixed(3)}`).join(', ') || '(none)',
+      sparseTop: sparseHits.slice(0, 3).map(h => `${h.chunkId.slice(0, 8)}=${h.score.toFixed(2)}`).join(', ') || '(none)',
+    });
+
     const fused = rrfFusion(
       denseHits.map(h => [h.chunkId, h.score] as const),
       sparseHits.map(h => [h.chunkId, h.score] as const),
       q.rrfK,
     );
     const rrfMap = new Map(fused.map(f => [f[0], f[1]]));
+
+    logger.info('[检索] RRF 融合', {
+      rrf: fused.length,
+      rrfTop: fused.slice(0, 5).map(([id, s]) => `${id.slice(0, 8)}=${s.toFixed(4)}`).join(', ') || '(none)',
+    });
 
     if (fused.length === 0) {
       const empty: RetrievalResult[] = [];
@@ -112,20 +147,18 @@ export class HybridRetriever {
 
     const candidateIds = fused.slice(0, q.rerankTopK).map(f => f[0]);
     const candidates = await this.loadCandidates(candidateIds, denseHits);
-    const { results: reranked, fallback: rerankFallback } = await this.reranker.rank(query, candidates, topK);
-    const scoreFiltered = reranked.filter(r => passesScoreFilter(
-      r.chunkId, r.score, rerankFallback, denseMap, sparseMap, q,
-    ));
-    if (scoreFiltered.length < reranked.length) {
-      logger.info('[检索] 分数阈值过滤', {
-        before: reranked.length,
-        after: scoreFiltered.length,
-        denseMin: q.denseMinSimilarity,
-        rerankMin: q.rerankMinScore,
-        rerankFallback,
-      });
-    }
-    const rerankScoreMap = new Map(scoreFiltered.map((r, i) => [r.chunkId, { score: r.score, rank: i }]));
+    const { results: reranked, fallback: rerankFallback } = await this.reranker.rank(
+      query, candidates, q.rerankTopK,
+    );
+    const { kept: scoreFiltered } = applyRerankFilter(reranked, q.rerankMinScore, rerankFallback);
+    const filterLog = buildRerankFilterLog(
+      reranked, denseMap, q.rerankMinScore, rerankFallback, scoreFiltered,
+    );
+    logger.info('[检索] Rerank 过滤', {
+      ...filterLog,
+      detail: formatRerankFilterDocs(filterLog.docs),
+    });
+    const rerankScoreMap = new Map(reranked.map((r, i) => [r.chunkId, { score: r.score, rank: i + 1 }]));
 
     const seen = new Set<string>();
     const finalIds = new Set<string>();
@@ -148,7 +181,7 @@ export class HybridRetriever {
 
     await this.fillTitles(results);
 
-    const candidatesDetail: RetrievalCandidateDetail[] = scoreFiltered.map((r, i) => ({
+    const candidatesDetail: RetrievalCandidateDetail[] = reranked.map((r, i) => ({
       chunkId: r.chunkId,
       documentId: r.documentId,
       content: r.text.slice(0, 200),
@@ -172,7 +205,7 @@ export class HybridRetriever {
         denseCount: denseHits.length,
         sparseCount: sparseHits.length,
         rrfCount: fused.length,
-        rerankCount: scoreFiltered.length,
+        rerankCount: reranked.length,
         rerankFallback,
         candidates: candidatesDetail,
       },
@@ -225,20 +258,4 @@ export class HybridRetriever {
       r.documentTitle = titleMap.get(r.documentId) ?? '';
     }
   }
-}
-
-function passesScoreFilter(
-  chunkId: string,
-  score: number,
-  rerankFallback: boolean,
-  denseMap: Map<string, number>,
-  sparseMap: Map<string, number>,
-  q: ReturnType<typeof getQuerySettings>,
-): boolean {
-  if (rerankFallback) {
-    const dense = denseMap.get(chunkId);
-    if (dense !== undefined) return dense >= q.denseMinSimilarity;
-    return sparseMap.has(chunkId);
-  }
-  return score >= q.rerankMinScore;
 }
