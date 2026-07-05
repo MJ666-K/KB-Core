@@ -4,5 +4,8 @@ export { chunks, embeddingStatusEnum } from './chunk';
 export { ingestJobs, ingestStageEnum, ingestStatusEnum } from './ingest-job';
 export { queryLogs } from './query-log';
 export { agentTraces } from './agent-trace';
+export { agents } from './agents';
+export { models } from './models';
+export { skillDefinitions } from './skill-definitions';
 export type { Citation, ToolCallRecord } from './query-log';
 export type { AgentStep } from './agent-trace';

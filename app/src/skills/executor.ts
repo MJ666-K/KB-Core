@@ -1,7 +1,7 @@
 import type { SkillContext, SkillResult } from './types';
 import type { FunctionDefinition, Message } from '../llm/llm-service';
 import type { RetrievalResult } from '../retrieve/retriever';
-import { formatCitations, deduplicateChunks } from './types';
+import { formatCitations, deduplicateChunks, buildContext } from './types';
 import { logger } from '../utils/logger';
 
 const MAX_SKILL_ITERATIONS = 3;
@@ -28,6 +28,12 @@ export class SkillExecutor {
     ctx: SkillContext,
   ): Promise<SkillResult> {
     const toolDefs = this.filterToolDefs(ctx.tools, allowedTools);
+    const skillStart = Date.now();
+
+    logger.info(`[SkillExecutor] 开始执行`, {
+      tools: allowedTools.length > 0 ? allowedTools.join(',') : '(none)',
+      maxIterations: MAX_SKILL_ITERATIONS,
+    });
 
     const messages: Message[] = [
       { role: 'system', content: instructions },
@@ -40,23 +46,56 @@ export class SkillExecutor {
     for (let iter = 0; iter < MAX_SKILL_ITERATIONS; iter++) {
       const isLastIter = iter === MAX_SKILL_ITERATIONS - 1;
       const hasTools = toolDefs.length > 0 && !isLastIter;
-      const response = await ctx.llm.chat({
-        messages,
+
+      const tokenBuffer: string[] = [];
+      let toolCalls: import('../llm/llm-service').ToolCall[] | undefined;
+
+      const iterMessages = isLastIter && messages.length > 2
+        ? [...messages, {
+            role: 'user' as const,
+            content: '你已完成所有检索。请停止继续搜索，直接基于以上所有检索到的法律条文，综合生成完整的最终分析报告。不要再提及"第X轮"、"下一步"或"进入"等检索计划用语。',
+          }]
+        : messages;
+
+      for await (const chunk of ctx.llm.chatStream({
+        messages: iterMessages,
         tools: hasTools ? toolDefs : undefined,
         tool_choice: hasTools ? 'auto' : undefined,
         temperature: 0.3,
-      });
-
-      if (!response.tool_calls?.length) {
-        logger.debug(`[SkillExecutor] done in ${iter + 1} iteration(s)`);
-        const answer = await this.streamAnswer(ctx, messages, response.content ?? '');
-        const deduped = deduplicateChunks(allRetrievalResults);
-        return { answer, citations: formatCitations(deduped), toolCalls: allToolCalls };
+      })) {
+        if (chunk.type === 'token') {
+          tokenBuffer.push(chunk.content);
+        } else if (chunk.type === 'done') {
+          toolCalls = chunk.tool_calls;
+        }
       }
 
-      messages.push({ role: 'assistant', content: response.content ?? '', tool_calls: response.tool_calls });
+      if (!toolCalls?.length) {
+        const elapsed = Date.now() - skillStart;
+        const answerText = tokenBuffer.join('');
+        logger.info(`[SkillExecutor] 完成 (${iter + 1} 轮, ${elapsed}ms)`, {
+          toolCalls: allToolCalls.map(tc => tc.name).join(',') || '(none)',
+          answerLen: answerText.length,
+        });
 
-      for (const call of response.tool_calls) {
+        if (ctx.events) {
+          ctx.events.emit({ type: 'answer_start' });
+          const batchSize = 2;
+          for (let i = 0; i < tokenBuffer.length; i += batchSize) {
+            const batch = tokenBuffer.slice(i, i + batchSize).join('');
+            ctx.events.emit({ type: 'answer_token', token: batch });
+            await new Promise<void>(resolve => setTimeout(resolve, 20));
+          }
+          ctx.events.emit({ type: 'answer_end' });
+        }
+
+        const deduped = deduplicateChunks(allRetrievalResults);
+        return { answer: answerText, citations: formatCitations(deduped), toolCalls: allToolCalls };
+      }
+
+      messages.push({ role: 'assistant', content: tokenBuffer.join(''), tool_calls: toolCalls });
+
+      for (const call of toolCalls) {
         let params: Record<string, unknown>;
         try { params = JSON.parse(call.function.arguments); } catch { params = {}; }
 
@@ -72,40 +111,46 @@ export class SkillExecutor {
           allRetrievalResults.push(...result);
         }
 
-        const content = JSON.stringify(result);
+        const content = this.isRetrievalResultArray(result)
+          ? buildContext(result)
+          : JSON.stringify(result);
         messages.push({
           role: 'tool', tool_call_id: call.id,
-          content: content.length <= 4000 ? content : content.slice(0, 4000) + '\n[...截断...]',
+          content: content.length <= 8000 ? content : content.slice(0, 8000) + '\n[...截断...]',
         });
       }
     }
 
     logger.warn(`[SkillExecutor] max ${MAX_SKILL_ITERATIONS} iterations, forcing answer`);
     const forceMessages = [...messages, { role: 'user' as const, content: '请基于以上信息给出最终回答。' }];
-    const answer = await this.streamAnswer(ctx, forceMessages, null);
+    const answer = await this.streamFinalAnswer(ctx, forceMessages);
     const deduped = deduplicateChunks(allRetrievalResults);
     return { answer, citations: formatCitations(deduped), toolCalls: allToolCalls };
   }
 
-  private async streamAnswer(ctx: SkillContext, messages: Message[], fallback: string | null): Promise<string> {
+  private async streamFinalAnswer(ctx: SkillContext, messages: Message[]): Promise<string> {
     if (!ctx.events) {
-      if (fallback !== null) return fallback;
       const res = await ctx.llm.chat({ messages, temperature: 0.3 });
       return res.content ?? '';
     }
 
     ctx.events.emit({ type: 'answer_start' });
-    let answer = '';
 
+    const tokenBuffer: string[] = [];
     for await (const chunk of ctx.llm.chatStream({ messages, temperature: 0.3 })) {
       if (chunk.type === 'token') {
-        answer += chunk.content;
-        ctx.events.emit({ type: 'answer_token', token: chunk.content });
+        tokenBuffer.push(chunk.content);
       }
     }
 
+    const batchSize = 2;
+    for (let i = 0; i < tokenBuffer.length; i += batchSize) {
+      const batch = tokenBuffer.slice(i, i + batchSize).join('');
+      ctx.events.emit({ type: 'answer_token', token: batch });
+      await new Promise<void>(resolve => setTimeout(resolve, 20));
+    }
     ctx.events.emit({ type: 'answer_end' });
-    return answer || fallback || '';
+    return tokenBuffer.join('');
   }
 
   private isRetrievalResultArray(result: unknown): result is RetrievalResult[] {

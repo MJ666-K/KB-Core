@@ -26,25 +26,49 @@ interface HistoryEntry { role: 'user' | 'assistant'; content: string }
 const history: HistoryEntry[] = [];
 let lastSteps: AgentStep[] = [];
 let rl: ReturnType<typeof createInterface>;
+let rlClosed = false;
 let thinkingBuf = '';
 let answerBuf = '';
 let gotAnswerTokens = false;
 let gotThinkingToken = false;
 let answerStreaming = false;
 let answerLnCount = 0;
+let printedAnswerHeader = false;
 let spinnerTimer: ReturnType<typeof setInterval> | null = null;
+let spinnerColor: string = C.gray;
 let phase: 'idle' | 'thinking' | 'tool' | 'answering' = 'idle';
 let lastStep: { action: string; kind: string; count: number } | null = null;
+
+const subAgentState = {
+  badge: null as string | null,
+  tool: null as { action: string; count: number } | null,
+  thinkingActive: false,
+};
+let gotSubAgentThinkingToken = false;
+
+function finalizeSubAgentTool(): void {
+  if (!subAgentState.tool) return;
+  stopSpinner();
+  const count = subAgentState.tool.count > 1 ? ` ×${subAgentState.tool.count}` : '';
+  process.stdout.write(`\r\x1b[K${C.dim}    → ✅ ${subAgentState.tool.action}${count}${C.reset}\n`);
+  subAgentState.tool = null;
+}
+
+function resetSubAgentState(): void {
+  finalizeSubAgentTool();
+  subAgentState.badge = null;
+  subAgentState.thinkingActive = false;
+}
 
 function print(t: string): void { process.stdout.write(t + '\n'); }
 function clearLine(): void { process.stdout.write('\r\x1b[K'); }
 
-function startSpinner(label: string): void {
+function startSpinner(label: string, color: string = C.gray): void {
   stopSpinner();
   const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
   let i = 0;
-  process.stdout.write(`${C.gray}${frames[0]} ${label}${C.reset}`);
-  spinnerTimer = setInterval(() => { process.stdout.write(`\r${C.gray}${frames[i = (i + 1) % frames.length]} ${label}${C.reset}`); }, 80);
+  process.stdout.write(`${color}${frames[0]} ${label}${C.reset}`);
+  spinnerTimer = setInterval(() => { process.stdout.write(`\r${color}${frames[i = (i + 1) % frames.length]} ${label}${C.reset}`); }, 80);
 }
 
 function stopSpinner(): void { if (spinnerTimer) { clearInterval(spinnerTimer); spinnerTimer = null; } clearLine(); }
@@ -78,6 +102,79 @@ function formatAnswer(t: string): string {
 }
 
 function handleEvent(data: Record<string, unknown>): void {
+  const subAgent = data.subAgent as { name: string; displayName: string } | undefined;
+
+  if (subAgent) {
+    // Suppress sub-agent tool lifecycle events that arrive after main answer streaming begins —
+    // otherwise "→ ✅ search_knowledge" lines would interleave inside the streamed answer text.
+    if (phase === 'answering' && (data.type === 'step' || data.type === 'step_end')) {
+      return;
+    }
+
+    const isNewSubAgent = subAgentState.badge !== subAgent.displayName;
+
+    if (isNewSubAgent) {
+      resetSubAgentState();
+      stopSpinner();
+      subAgentState.badge = subAgent.displayName;
+      process.stdout.write(`${C.dim}  📡 [${subAgent.displayName}]${C.reset}\n`);
+    }
+
+    if (data.type === 'thinking') {
+      finalizeSubAgentTool();
+      if (!data.token) {
+        if (!subAgentState.thinkingActive) {
+          subAgentState.thinkingActive = true;
+          process.stdout.write(`${C.dim}    💭 ${C.reset}`);
+        }
+        startSpinner('思考中...', C.dim);
+      } else {
+        if (!subAgentState.thinkingActive) {
+          subAgentState.thinkingActive = true;
+          stopSpinner();
+          process.stdout.write(`${C.dim}    💭 ${C.reset}`);
+        } else if (!gotSubAgentThinkingToken) {
+          stopSpinner();
+          gotSubAgentThinkingToken = true;
+        }
+        process.stdout.write(`${C.dim}${data.token as string}${C.reset}`);
+      }
+      return;
+    }
+
+    if (data.type === 'thinking_end') {
+      finalizeSubAgentTool();
+      stopSpinner();
+      if (subAgentState.thinkingActive) {
+        process.stdout.write(`\n`);
+        subAgentState.thinkingActive = false;
+        gotSubAgentThinkingToken = false;
+      }
+      return;
+    }
+
+    if (data.type === 'step') {
+      const action = data.action as string;
+      if (subAgentState.tool && subAgentState.tool.action === action) {
+        subAgentState.tool.count++;
+        const countLabel = ` ×${subAgentState.tool.count}`;
+        startSpinner(`    → 🔧 ${action}${countLabel}`, C.dim);
+      } else {
+        finalizeSubAgentTool();
+        subAgentState.tool = { action, count: 1 };
+        startSpinner(`    → 🔧 ${action}`, C.dim);
+      }
+      return;
+    }
+
+    if (data.type === 'step_end') {
+      finalizeSubAgentTool();
+      return;
+    }
+
+    return;
+  }
+
   switch (data.type) {
     case 'thinking':
       if (!data.token) {
@@ -94,6 +191,7 @@ function handleEvent(data: Record<string, unknown>): void {
       phase = 'idle';
       break;
     case 'step': {
+      resetSubAgentState();
       phase = 'tool';
       const action = data.action as string;
       const kind = (data.kind as string) || 'tool';
@@ -111,21 +209,35 @@ function handleEvent(data: Record<string, unknown>): void {
       break;
     }
     case 'step_end': {
+      if (lastStep && lastStep.action === (data.action as string)) {
+        stopSpinner();
+        process.stdout.write(`\r\x1b[K${C.dim}  ✅ ${lastStep.action}${lastStep.count > 1 ? ` ×${lastStep.count}` : ''}${C.reset}\n`);
+        lastStep = null;
+      }
+      phase = 'idle';
       break;
     }
     case 'answer_start':
       phase = 'answering'; answerBuf = ''; answerLnCount = 0; gotAnswerTokens = false; answerStreaming = false; stopSpinner();
-      if (lastStep) {
-        process.stdout.write(`\r\x1b[K${C.dim}  ✅ ${lastStep.action}${lastStep.count > 1 ? ` ×${lastStep.count}` : ''}${C.reset}\n`);
-        lastStep = null;
-      } else {
-        process.stdout.write('\n');
-      }
-      print(`${C.green}${C.bold}🤖 回答${C.reset}`);
+      finalizeSubAgentTool();
+      subAgentState.badge = null;
       startSpinner('生成中...');
       break;
     case 'token':
-      if (!gotAnswerTokens) { gotAnswerTokens = true; answerStreaming = true; stopSpinner(); process.stdout.write('\n'); answerLnCount++; }
+      if (!gotAnswerTokens) {
+        gotAnswerTokens = true; answerStreaming = true; stopSpinner();
+        if (!printedAnswerHeader) {
+          if (lastStep) {
+            process.stdout.write(`\r\x1b[K${C.dim}  ✅ ${lastStep.action}${lastStep.count > 1 ? ` ×${lastStep.count}` : ''}${C.reset}\n`);
+            lastStep = null;
+          } else {
+            process.stdout.write('\n');
+          }
+          print(`${C.green}${C.bold}🤖 回答${C.reset}`);
+          printedAnswerHeader = true;
+        }
+        process.stdout.write('\n'); answerLnCount++;
+      }
       answerBuf += data.token as string;
       process.stdout.write(data.token as string);
       answerLnCount += ((data.token as string).match(/\n/g) || []).length;
@@ -133,14 +245,10 @@ function handleEvent(data: Record<string, unknown>): void {
     case 'answer_end': {
       stopSpinner();
       if (gotAnswerTokens) {
-        const moveUp = answerLnCount + 1;
-        process.stdout.write(`\x1b[${moveUp}A\x1b[J`);
-        print(formatAnswer(answerBuf));
-      } else if (!gotAnswerTokens) {
         process.stdout.write('\n');
       }
-      process.stdout.write('\n');
       phase = 'idle';
+      finalizeSubAgentTool();
       break;
     }
     case 'result': {
@@ -152,14 +260,16 @@ function handleEvent(data: Record<string, unknown>): void {
       if (!gotAnswerTokens) {
         const answer = (data.answer as string) ?? thinkingBuf;
         if (termination === 'direct' && gotThinkingToken) {
-          // thinking tokens were already the answer (shown in 💭 section), no re-print
           process.stdout.write(`${C.reset}\n`);
           history.push({ role: 'assistant', content: answer });
         } else {
-          if (!answerStreaming) print(`\n${C.green}${C.bold}🤖 回答${C.reset}\n`);
+          if (!answerStreaming && answerBuf.length === 0 && !printedAnswerHeader) {
+            print(`\n${C.green}${C.bold}🤖 回答${C.reset}\n`);
+          }
           print(formatAnswer(answer));
           history.push({ role: 'assistant', content: answer });
           answerStreaming = false;
+          printedAnswerHeader = true;
         }
       } else {
         history.push({ role: 'assistant', content: answerBuf });
@@ -173,17 +283,21 @@ function handleEvent(data: Record<string, unknown>): void {
       const tc = termination === 'skill' ? C.green : termination === 'direct' ? C.cyan : C.yellow;
       print(`\n${C.dim}⏱ ${latencyMs}ms · ${tc}${termination}${C.reset}${C.dim} · ${citations.length} 引用${C.reset}\n`);
       lastSteps = (data.steps as AgentStep[]) ?? lastSteps;
+      resetSubAgentState();
       break;
     }
     case 'error':
       stopSpinner(); phase = 'idle';
       print(`\n${C.red}❌ ${data.error as string}${C.reset}\n`);
+      resetSubAgentState();
       break;
   }
 }
 
 async function query(question: string): Promise<void> {
+  resetSubAgentState();
   gotAnswerTokens = false; gotThinkingToken = false; thinkingBuf = ''; answerBuf = ''; answerStreaming = false; phase = 'idle'; answerLnCount = 0; lastStep = null;
+  printedAnswerHeader = false;
 
   await new Promise<void>((resolve, reject) => {
     const ws = new WebSocket(WS_URL);
@@ -220,9 +334,11 @@ async function main(): Promise<void> {
   catch { print(`  ${C.red}✗ 连接失败，请确认 bun run dev${C.reset}\n`); return; }
 
   rl = createInterface({ input: process.stdin, output: process.stdout });
+  rl.on('close', () => { rlClosed = true; });
   const prompt = (): void => {
+    if (!rl || rlClosed) return;
     rl.question(`${C.cyan}❯${C.reset} `, async (input) => {
-      const q = input.trim();
+      const q = (input || '').trim();
       if (!q) { prompt(); return; }
       switch (q) {
         case '/quit': case '/exit': print(`\n${C.dim}再见 👋${C.reset}\n`); rl.close(); process.exit(0); return;

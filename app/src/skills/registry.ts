@@ -5,39 +5,43 @@ import { SkillLoader } from './loader';
 export class SkillRegistry {
   private readonly skills = new Map<string, Skill>();
 
-  /** 手动注册（兼容旧接口，但推荐用 loadFromDir） */
   register(skill: Skill): void {
-    if (this.skills.has(skill.metadata.name)) {
-      throw new Error(`Skill already registered: ${skill.metadata.name}`);
-    }
     this.skills.set(skill.metadata.name, skill);
   }
 
   get(name: string): Skill | undefined { return this.skills.get(name); }
   has(name: string): boolean { return this.skills.has(name); }
 
-  toFunctionDefinitions(): FunctionDefinition[] {
-    return [...this.skills.values()].map(s => ({
+  toFunctionDefinitions(whitelist?: readonly string[]): FunctionDefinition[] {
+    const list = whitelist && whitelist.length > 0
+      ? [...this.skills.values()].filter(s => whitelist.includes(s.metadata.name))
+      : [...this.skills.values()];
+    return list.map(s => ({
       type: 'function' as const,
       function: { name: s.metadata.name, description: s.metadata.description, parameters: s.metadata.parameters },
     }));
   }
 
-  listMetadata(): SkillMetadata[] {
-    return [...this.skills.values()].map(s => s.metadata);
+  listMetadata(whitelist?: readonly string[]): SkillMetadata[] {
+    const list = whitelist && whitelist.length > 0
+      ? [...this.skills.values()].filter(s => whitelist.includes(s.metadata.name))
+      : [...this.skills.values()];
+    return list.map(s => s.metadata);
+  }
+
+  /** 重新从 DB 加载所有 skills（覆盖已有） */
+  async reload(): Promise<void> {
+    this.skills.clear();
+    const loader = new SkillLoader();
+    const map = await loader.loadAll();
+    for (const skill of map.values()) {
+      this.register(skill);
+    }
   }
 }
 
-/**
- * 创建 SkillRegistry 并从 src/skills/ 目录动态加载所有 Skill。
- * SKILL.md 是唯一真相（metadata），index.ts 提供执行逻辑。
- */
-export async function createSkillRegistry(skillsBaseDir: string): Promise<SkillRegistry> {
-  const loader = new SkillLoader(skillsBaseDir);
-  const skillMap = await loader.loadAll();
+export async function createSkillRegistry(): Promise<SkillRegistry> {
   const registry = new SkillRegistry();
-  for (const skill of skillMap.values()) {
-    registry.register(skill);
-  }
+  await registry.reload();
   return registry;
 }

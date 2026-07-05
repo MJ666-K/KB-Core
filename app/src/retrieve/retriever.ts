@@ -45,6 +45,7 @@ export interface RetrievalDetails {
 
 export interface RetrieveOptions {
   datasetId: string;
+  datasetIds?: readonly string[];
   topK?: number;
 }
 
@@ -69,7 +70,8 @@ export class HybridRetriever {
 
   async retrieve(query: string, opts: RetrieveOptions): Promise<RetrievalResult[]> {
     const topK = opts.topK ?? config.searchTopK;
-    const cacheKey = `${opts.datasetId}:${query}:${topK}`;
+    const idsStr = (opts.datasetIds ?? [opts.datasetId]).join(',');
+    const cacheKey = `${idsStr}:${query}:${topK}`;
     const cached = this.resultCache.get(cacheKey);
     if (cached) return cached;
     return (await this.retrieveWithDetails(query, opts)).results;
@@ -77,13 +79,14 @@ export class HybridRetriever {
 
   async retrieveWithDetails(query: string, opts: RetrieveOptions): Promise<RetrieveWithDetailsResult> {
     const topK = opts.topK ?? config.searchTopK;
+    const idsStr = (opts.datasetIds ?? [opts.datasetId]).join(',');
 
     const queryVec = await this.embeddingService.embedQuery(query);
     const extend = topK * config.denseTopKMultiplier;
 
     const [denseHits, sparseHits] = await Promise.all([
-      denseSearch(queryVec, opts.datasetId, extend),
-      sparseSearch(query, opts.datasetId, extend),
+      denseSearch(queryVec, opts.datasetId, extend, opts.datasetIds),
+      sparseSearch(query, opts.datasetId, extend, opts.datasetIds),
     ]);
 
     const denseMap = new Map(denseHits.map(h => [h.chunkId, h.score]));
@@ -98,7 +101,7 @@ export class HybridRetriever {
 
     if (fused.length === 0) {
       const empty: RetrievalResult[] = [];
-      const cacheKey = `${opts.datasetId}:${query}:${topK}`;
+      const cacheKey = `${idsStr}:${query}:${topK}`;
       this.resultCache.set(cacheKey, empty);
       return { results: empty, details: { query, topK, denseCount: 0, sparseCount: 0, rrfCount: 0, rerankCount: 0, rerankFallback: false, candidates: [] } };
     }
@@ -143,7 +146,7 @@ export class HybridRetriever {
       inFinal: finalIds.has(r.chunkId),
     }));
 
-    const cacheKey = `${opts.datasetId}:${query}:${topK}`;
+    const cacheKey = `${idsStr}:${query}:${topK}`;
     this.resultCache.set(cacheKey, results);
 
     return {

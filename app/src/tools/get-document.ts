@@ -1,7 +1,7 @@
 import type { Tool, ToolContext } from './types';
 import { db } from '../db/client';
 import { documents } from '../db/schema';
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq, and, isNull, inArray } from 'drizzle-orm';
 
 interface GetDocumentParams { documentId: string; [key: string]: unknown; }
 
@@ -14,10 +14,14 @@ export const getDocumentTool: Tool<GetDocumentParams> = {
     required: ['documentId'],
   },
   async execute(params: GetDocumentParams, ctx: ToolContext) {
+    const ids = ctx.datasetIds && ctx.datasetIds.length > 0 ? ctx.datasetIds : [ctx.datasetId];
+    const datasetFilter = ids.length === 1
+      ? eq(documents.datasetId, ids[0]!)
+      : inArray(documents.datasetId, [...ids]);
     const doc = await db.query.documents.findFirst({
       where: and(
         eq(documents.id, params.documentId),
-        eq(documents.datasetId, ctx.datasetId),
+        datasetFilter,
         isNull(documents.deletedAt),
       ),
     });

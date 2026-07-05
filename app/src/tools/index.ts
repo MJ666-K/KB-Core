@@ -4,10 +4,19 @@ import { getDocumentTool } from './get-document';
 import { getChunkTool } from './get-chunk';
 import { listDocumentsTool } from './list-documents';
 import { summarizeTextTool, setLLM } from './summarize-text';
+import { callAgentTool } from './call-agent';
 import type { HybridRetriever } from '../retrieve/retriever';
 import type { LLMService } from '../llm/llm-service';
 
-export function createToolRegistry(retriever: HybridRetriever, llm: LLMService): ToolRegistry {
+export interface ToolRegistryOptions {
+  includeCallAgent?: boolean;
+}
+
+export function createToolRegistry(
+  retriever: HybridRetriever,
+  llm: LLMService,
+  options: ToolRegistryOptions = {},
+): ToolRegistry {
   setRetriever(retriever);
   setLLM(llm);
   const registry = new ToolRegistry();
@@ -16,6 +25,9 @@ export function createToolRegistry(retriever: HybridRetriever, llm: LLMService):
   registry.register(getChunkTool);
   registry.register(listDocumentsTool);
   registry.register(summarizeTextTool);
+  if (options.includeCallAgent) {
+    registry.register(callAgentTool);
+  }
   return registry;
 }
 

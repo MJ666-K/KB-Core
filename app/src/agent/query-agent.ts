@@ -10,6 +10,7 @@ import { formatCitations, deduplicateChunks } from '../skills/types';
 import type { RetrievalResult } from '../retrieve/retriever';
 import { buildSystemPrompt } from './system-prompt';
 import type { QueryOptions, QueryResult, EventStream } from './types';
+import type { ModelConfig } from './sub-agent-registry';
 import { db } from '../db/client';
 import { queryLogs, agentTraces } from '../db/schema';
 import { config } from '../config';
@@ -27,10 +28,46 @@ export class QueryAgent {
     private readonly skillRegistry: SkillRegistry,
     private readonly toolRegistry: ToolRegistry,
     private readonly hookRegistry: HookRegistry,
+    private readonly modelConfig?: ModelConfig,
   ) {}
 
+  private buildModelChatOptions(): Pick<ChatOptions, 'model' | 'apiKey' | 'apiUrl' | 'temperature' | 'maxTokens' | 'topK' | 'topP' | 'frequencyPenalty' | 'presencePenalty'> {
+    if (!this.modelConfig) return {};
+    return {
+      model: this.modelConfig.modelId,
+      apiKey: this.modelConfig.apiKey,
+      apiUrl: this.modelConfig.apiUrl,
+      temperature: this.modelConfig.temperature,
+      maxTokens: this.modelConfig.maxTokens,
+      topK: this.modelConfig.topK,
+      topP: this.modelConfig.topP,
+      frequencyPenalty: this.modelConfig.frequencyPenalty,
+      presencePenalty: this.modelConfig.presencePenalty,
+    };
+  }
+
   async execute(query: string, options: QueryOptions, events?: EventStream): Promise<QueryResult> {
+    const defaultSystemPrompt = buildSystemPrompt(this.skillRegistry, this.toolRegistry);
+    return this.executeWithSystemPrompt(query, options, defaultSystemPrompt, events);
+  }
+
+  async executeWithSystemPrompt(
+    query: string,
+    options: QueryOptions,
+    systemPrompt: string,
+    events?: EventStream,
+  ): Promise<QueryResult> {
     const startTime = Date.now();
+    const modelInfo = this.modelConfig ? `${this.modelConfig.displayName} (${this.modelConfig.modelId})` : 'default';
+    logger.info(`[Agent] 开始执行`, {
+      query: query.slice(0, 100),
+      model: modelInfo,
+      datasetId: options.datasetId?.slice(0, 8),
+      historyLen: (options.history ?? []).length,
+      temperature: this.modelConfig?.temperature,
+      maxTokens: this.modelConfig?.maxTokens,
+    });
+
     const steps: AgentStep[] = [];
     const allToolCalls: ToolCallRecord[] = [];
     const skillResults: SkillResult[] = [];
@@ -38,7 +75,7 @@ export class QueryAgent {
     let directAnswer: string | null = null;
 
     const messages: Message[] = [
-      { role: 'system', content: buildSystemPrompt(this.skillRegistry, this.toolRegistry) },
+      { role: 'system', content: systemPrompt },
       ...(options.history ?? []),
       { role: 'user', content: query },
     ];
@@ -52,19 +89,39 @@ export class QueryAgent {
     let skillDone = false;
 
     for (let iter = 0; iter < maxIterations && !skillDone; iter++) {
+      const iterStart = Date.now();
+      logger.debug(`[Agent] 迭代 ${iter + 1}/${maxIterations}`, {
+        model: modelInfo,
+        messagesCount: messages.length,
+        toolsCount: allToolDefs.length,
+      });
+
       const llmOpts: ChatOptions = {
         messages,
         tools: allToolDefs,
         tool_choice: 'auto',
+        ...this.buildModelChatOptions(),
       };
 
       const response = await this.streamOrChat(llmOpts, events);
+      const iterElapsed = Date.now() - iterStart;
 
       if (!response.tool_calls?.length) {
         directAnswer = response.content ?? '';
+        const contentLen = directAnswer.length;
+        logger.info(`[Agent] 迭代 ${iter + 1} → 直接回答 (${iterElapsed}ms)`, {
+          contentLen,
+          content: directAnswer.slice(0, 200),
+        });
         steps.push({ iteration: iter, thought: '直接回答', action: 'answer', params: {}, resultSummary: directAnswer.slice(0, 200) });
         break;
       }
+
+      const toolNames = response.tool_calls.map(tc => tc.function.name).join(', ');
+      logger.info(`[Agent] 迭代 ${iter + 1} → 请求工具调用 (${iterElapsed}ms)`, {
+        tools: toolNames,
+        count: response.tool_calls.length,
+      });
 
       messages.push({ role: 'assistant', content: response.content ?? '', tool_calls: response.tool_calls });
 
@@ -77,7 +134,9 @@ export class QueryAgent {
         steps.push({ iteration: iter, thought: response.content ?? '', action: name, params, resultSummary: '' });
 
         events?.emit({ type: 'tool_call_start', name, kind });
+        const callStart = Date.now();
         const result = await this.executeCallable(name, params, options, events);
+        const callElapsed = Date.now() - callStart;
         allToolCalls.push({ name, kind, params });
 
         const retrievalDetails = drainRetrievalDetails();
@@ -88,6 +147,12 @@ export class QueryAgent {
         if (this.isSkillResult(result)) {
           skillResults.push(result);
           const summary = this.summarizeSkillResult(name, result);
+          logger.info(`[Agent] ${kind} ${name} 返回结果 (${callElapsed}ms)`, {
+            kind,
+            answerLen: result.answer.length,
+            citations: result.citations.length,
+            toolCalls: result.toolCalls.map(tc => tc.name).join(',') || '(none)',
+          });
           messages.push({ role: 'tool', tool_call_id: call.id, content: summary });
           steps[steps.length - 1]!.resultSummary = summary;
           events?.emit({ type: 'tool_call_end', name, summary });
@@ -98,9 +163,15 @@ export class QueryAgent {
             directRetrievalResults.push(...(result as RetrievalResult[]));
           }
           const toolContent = this.formatToolResult(result);
+          const resultSummary = toolContent.slice(0, 80);
+          logger.info(`[Agent] ${kind} ${name} 返回结果 (${callElapsed}ms)`, {
+            kind,
+            resultLen: toolContent.length,
+            summary: resultSummary,
+          });
           messages.push({ role: 'tool', tool_call_id: call.id, content: toolContent });
           steps[steps.length - 1]!.resultSummary = toolContent.slice(0, 200);
-          events?.emit({ type: 'tool_call_end', name, summary: toolContent.slice(0, 80) });
+          events?.emit({ type: 'tool_call_end', name, summary: resultSummary });
         }
       }
     }
@@ -109,6 +180,14 @@ export class QueryAgent {
       query, messages, skillResults, directRetrievalResults, directAnswer, options, events,
     );
     const latencyMs = Date.now() - startTime;
+    logger.info(`[Agent] 任务完成`, {
+      elapsed: `${latencyMs}ms`,
+      termination,
+      iterations: steps.length,
+      toolCalls: allToolCalls.map(tc => tc.name).join(',') || '(none)',
+      answerLen: answer.length,
+      citations: citations.length,
+    });
     const queryLogId = await this.logQuery(query, answer, citations, allToolCalls, steps, latencyMs, options);
 
     events?.emit({ type: 'result_end', citations, latencyMs, termination, queryLogId });
@@ -117,23 +196,45 @@ export class QueryAgent {
   }
 
   private async streamOrChat(opts: ChatOptions, events?: EventStream): Promise<ChatResponse> {
-    if (!events) return this.llm.chat(opts);
+    const streamStart = Date.now();
+    const modelInfo = opts.model ?? 'default';
+
+    if (!events) {
+      const result = await this.llm.chat(opts);
+      logger.debug(`[Agent:LLM] chat 完成 (${Date.now() - streamStart}ms)`, {
+        model: modelInfo,
+        contentLen: result.content?.length ?? 0,
+        toolCalls: result.tool_calls?.length ?? 0,
+      });
+      return result;
+    }
 
     events.emit({ type: 'thinking_start' });
-    let content = '';
+    const tokenBuffer: string[] = [];
     let toolCalls: ToolCall[] | undefined;
 
     for await (const chunk of this.llm.chatStream(opts)) {
       if (chunk.type === 'token') {
-        content += chunk.content;
+        tokenBuffer.push(chunk.content);
         events.emit({ type: 'thinking_token', token: chunk.content });
       } else if (chunk.type === 'done') {
         toolCalls = chunk.tool_calls;
       }
     }
 
+    const elapsed = Date.now() - streamStart;
+    const decision = toolCalls?.length
+      ? `工具调用: ${toolCalls.map(tc => tc.function.name).join(',')}`
+      : '直接回答';
+    logger.info(`[Agent:LLM] stream 完成 (${elapsed}ms)`, {
+      model: modelInfo,
+      tokens: tokenBuffer.length,
+      decision,
+    });
+
     events.emit({ type: 'thinking_end' });
-    return { content: content || null, tool_calls: toolCalls };
+
+    return { content: tokenBuffer.join('') || null, tool_calls: toolCalls };
   }
 
   private async resolveFinalAnswer(
@@ -142,25 +243,48 @@ export class QueryAgent {
     if (skillResults.length > 0) {
       const lastSkill = skillResults[skillResults.length - 1]!;
       const allCitations = skillResults.flatMap(sr => sr.citations);
+      logger.info(`[Agent] 终止路径: skill`, {
+        skillName: lastSkill.answer.slice(0, 50),
+        answerLen: lastSkill.answer.length,
+        citations: allCitations.length,
+      });
+
       return { answer: lastSkill.answer, citations: deduplicateCitations(allCitations), termination: 'skill' };
     }
     const fallbackCitations = deduplicateCitations(formatCitations(deduplicateChunks(directRetrievalResults)));
-    if (directAnswer !== null) return { answer: directAnswer, citations: fallbackCitations, termination: 'direct' };
+    if (directAnswer !== null) {
+      logger.info(`[Agent] 终止路径: direct`, {
+        answerLen: directAnswer.length,
+        citations: fallbackCitations.length,
+      });
+      return { answer: directAnswer, citations: fallbackCitations, termination: 'direct' };
+    }
+
+    logger.info(`[Agent] 终止路径: synthesis`, { messagesCount: messages.length });
 
     if (events) {
       events.emit({ type: 'answer_start' });
-      let answer = '';
-      for await (const chunk of this.llm.chatStream({ messages: [...messages, { role: 'user', content: '请基于以上检索到的资料，给出最终回答。' }] })) {
+
+      const tokenBuffer: string[] = [];
+      const synthStart = Date.now();
+      for await (const chunk of this.llm.chatStream({ messages: [...messages, { role: 'user', content: '请基于以上检索到的资料，给出最终回答。' }], ...this.buildModelChatOptions() })) {
         if (chunk.type === 'token') {
-          answer += chunk.content;
-          events.emit({ type: 'answer_token', token: chunk.content });
+          tokenBuffer.push(chunk.content);
         }
       }
+      logger.debug(`[Agent:LLM] synthesis 完成 (${Date.now() - synthStart}ms)`, { answerLen: tokenBuffer.join('').length });
+
+      const batchSize = 2;
+      for (let i = 0; i < tokenBuffer.length; i += batchSize) {
+        const batch = tokenBuffer.slice(i, i + batchSize).join('');
+        events.emit({ type: 'answer_token', token: batch });
+        await new Promise<void>(resolve => setTimeout(resolve, 20));
+      }
       events.emit({ type: 'answer_end' });
-      return { answer: answer || '（无法生成回答）', citations: fallbackCitations, termination: 'synthesis' };
+      return { answer: tokenBuffer.join('') || '（无法生成回答）', citations: fallbackCitations, termination: 'synthesis' };
     }
 
-    const finalResponse = await this.llm.chat({ messages: [...messages, { role: 'user', content: '请基于以上检索到的资料，给出最终回答。标注引用来源。' }] });
+    const finalResponse = await this.llm.chat({ messages: [...messages, { role: 'user', content: '请基于以上检索到的资料，给出最终回答。标注引用来源。' }], ...this.buildModelChatOptions() });
     return { answer: finalResponse.content ?? '（无法生成回答）', citations: fallbackCitations, termination: 'synthesis' };
   }
 
@@ -185,6 +309,11 @@ export class QueryAgent {
     const beforeResult = await this.hookRegistry.runBefore(name, params, { datasetId: options.datasetId, userId: options.userId }).catch(err => { logger.warn(`[Hook before] ${name} threw`, err); return undefined; });
     if (beforeResult?.block) return { error: beforeResult.reason ?? 'blocked by hook' };
 
+    const effectiveDatasetIds = options.datasetIds && options.datasetIds.length > 0
+      ? options.datasetIds
+      : [options.datasetId];
+    const toolCtx = { datasetId: effectiveDatasetIds[0] ?? options.datasetId, datasetIds: effectiveDatasetIds, userId: options.userId, events };
+
     const skill = this.skillRegistry.get(name);
     let result: unknown;
     if (skill) {
@@ -194,7 +323,7 @@ export class QueryAgent {
     } else {
       const tool = this.toolRegistry.get(name);
       if (!tool) return { error: `Unknown callable: ${name}` };
-      try { result = await tool.execute(params, { datasetId: options.datasetId }); } catch (err) { logger.error(`[Tool ${name}] failed`, err); result = { error: `Tool ${name} failed: ${err instanceof Error ? err.message : String(err)}` }; }
+      try { result = await tool.execute(params, toolCtx); } catch (err) { logger.error(`[Tool ${name}] failed`, err); result = { error: `Tool ${name} failed: ${err instanceof Error ? err.message : String(err)}` }; }
     }
 
     try { const afterResult = await this.hookRegistry.runAfter(name, result, { datasetId: options.datasetId, userId: options.userId }); if (afterResult !== undefined) result = afterResult; } catch (err) { logger.warn(`[Hook after] ${name} threw`, err); }
@@ -203,10 +332,13 @@ export class QueryAgent {
 
   private buildSkillContext(params: Record<string, unknown>, options: QueryOptions, events?: EventStream): SkillContext {
     const self = this;
+    const effectiveDatasetIds = options.datasetIds && options.datasetIds.length > 0
+      ? options.datasetIds
+      : [options.datasetId];
     return {
-      params, datasetId: options.datasetId, userId: options.userId, history: options.history,
-      tools: this.toolRegistry, llm: this.llm, hooks: this.hookRegistry, events,
-      async executeTool(name, toolParams) { return self.executeCallable(name, toolParams, options); },
+      params, datasetId: effectiveDatasetIds[0] ?? options.datasetId, userId: options.userId, history: options.history,
+      tools: this.toolRegistry, llm: this.llm, hooks: this.hookRegistry, events, datasetIds: effectiveDatasetIds,
+      async executeTool(name, toolParams) { return self.executeCallable(name, toolParams, options, events); },
     };
   }
 

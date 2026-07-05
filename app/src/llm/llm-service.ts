@@ -34,6 +34,13 @@ export interface ChatOptions {
   tool_choice?: 'auto' | 'none' | 'required';
   temperature?: number;
   maxTokens?: number;
+  topK?: number | null;
+  topP?: number | null;
+  frequencyPenalty?: number | null;
+  presencePenalty?: number | null;
+  model?: string;
+  apiKey?: string | null;
+  apiUrl?: string | null;
 }
 
 const MAX_RETRIES = 3;
@@ -56,12 +63,31 @@ async function fetchWithRetry(url: string, options: RequestInit, label: string):
 
 export class LLMService {
   async chat(opts: ChatOptions): Promise<ChatResponse> {
-    const url = `${config.llmApiUrl}/chat/completions`;
+    const url = `${opts.apiUrl ?? config.llmApiUrl}/chat/completions`;
+    const apiKey = opts.apiKey ?? config.llmApiKey;
+    const model = opts.model ?? config.llmModelId;
+    const callStart = Date.now();
     const body: Record<string, unknown> = {
-      model: config.llmModelId,
+      model,
       messages: opts.messages,
       temperature: opts.temperature ?? 0.2,
     };
+
+    const hasTools = !!(opts.tools && opts.tools.length > 0);
+    logger.info(`[LLM] chat 开始`, {
+      model,
+      url: opts.apiUrl ?? config.llmApiUrl,
+      customApiKey: !!opts.apiKey,
+      messagesCount: opts.messages.length,
+      temperature: body.temperature,
+      maxTokens: opts.maxTokens,
+      topK: opts.topK,
+      topP: opts.topP,
+      frequencyPenalty: opts.frequencyPenalty,
+      presencePenalty: opts.presencePenalty,
+      toolsCount: hasTools ? opts.tools!.length : 0,
+      toolChoice: hasTools ? (opts.tool_choice ?? 'auto') : 'none',
+    });
 
     if (opts.tools && opts.tools.length > 0) {
       body.tools = opts.tools;
@@ -70,12 +96,24 @@ export class LLMService {
     if (opts.maxTokens) {
       body.max_tokens = opts.maxTokens;
     }
+    if (opts.topK && opts.topK > 0) {
+      body.top_k = opts.topK;
+    }
+    if (opts.topP != null && opts.topP > 0) {
+      body.top_p = opts.topP;
+    }
+    if (opts.frequencyPenalty != null && opts.frequencyPenalty !== 0) {
+      body.frequency_penalty = opts.frequencyPenalty;
+    }
+    if (opts.presencePenalty != null && opts.presencePenalty !== 0) {
+      body.presence_penalty = opts.presencePenalty;
+    }
 
     const res = await fetchWithRetry(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.llmApiKey}`,
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
     }, 'LLM');
@@ -100,13 +138,38 @@ export class LLMService {
     }
 
     const msg = json.choices[0].message;
+    const elapsed = Date.now() - callStart;
+    logger.info(`[LLM] chat 完成 (${elapsed}ms)`, {
+      model,
+      contentLen: msg.content?.length ?? 0,
+      toolCallsCount: msg.tool_calls?.length ?? 0,
+      toolCalls: (msg.tool_calls ?? []).map(tc => tc.function.name).join(','),
+    });
     return { content: msg.content, tool_calls: msg.tool_calls };
   }
 
   async *chatStream(opts: ChatOptions): AsyncIterable<StreamChunk> {
-    const url = `${config.llmApiUrl}/chat/completions`;
+    const url = `${opts.apiUrl ?? config.llmApiUrl}/chat/completions`;
+    const apiKey = opts.apiKey ?? config.llmApiKey;
+    const model = opts.model ?? config.llmModelId;
+    const streamStart = Date.now();
+    const hasTools = !!(opts.tools && opts.tools.length > 0);
+    logger.info(`[LLM] stream 开始`, {
+      model,
+      url: opts.apiUrl ?? config.llmApiUrl,
+      customApiKey: !!opts.apiKey,
+      messagesCount: opts.messages.length,
+      temperature: opts.temperature ?? 0.2,
+      maxTokens: opts.maxTokens,
+      topK: opts.topK,
+      topP: opts.topP,
+      frequencyPenalty: opts.frequencyPenalty,
+      presencePenalty: opts.presencePenalty,
+      toolsCount: hasTools ? opts.tools!.length : 0,
+      toolChoice: hasTools ? (opts.tool_choice ?? 'auto') : 'none',
+    });
     const body: Record<string, unknown> = {
-      model: config.llmModelId,
+      model,
       messages: opts.messages,
       temperature: opts.temperature ?? 0.2,
       stream: true,
@@ -119,12 +182,24 @@ export class LLMService {
     if (opts.maxTokens) {
       body.max_tokens = opts.maxTokens;
     }
+    if (opts.topK && opts.topK > 0) {
+      body.top_k = opts.topK;
+    }
+    if (opts.topP != null && opts.topP > 0) {
+      body.top_p = opts.topP;
+    }
+    if (opts.frequencyPenalty != null && opts.frequencyPenalty !== 0) {
+      body.frequency_penalty = opts.frequencyPenalty;
+    }
+    if (opts.presencePenalty != null && opts.presencePenalty !== 0) {
+      body.presence_penalty = opts.presencePenalty;
+    }
 
     const res = await fetchWithRetry(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.llmApiKey}`,
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
     }, 'LLM-stream');
@@ -143,6 +218,7 @@ export class LLMService {
     const decoder = new TextDecoder();
     let buffer = '';
     const toolCallsAcc = new Map<number, { id: string; name: string; arguments: string }>();
+    let tokenCount = 0;
 
     while (true) {
       const { value, done } = await reader.read();
@@ -165,6 +241,7 @@ export class LLMService {
           if (!choice) continue;
 
           if (choice.delta?.content) {
+            tokenCount++;
             yield { type: 'token', content: choice.delta.content };
           }
 
@@ -184,11 +261,23 @@ export class LLMService {
               type: 'function' as const,
               function: { name: tc.name, arguments: tc.arguments },
             }));
+            const elapsed = Date.now() - streamStart;
+            logger.info(`[LLM] stream 完成 (${elapsed}ms)`, {
+              model,
+              tokens: tokenCount,
+              decision: `工具: ${toolCalls.map(tc => tc.function.name).join(',')}`,
+            });
             yield { type: 'done', tool_calls: toolCalls };
             return;
           }
 
           if (choice.finish_reason === 'stop') {
+            const elapsed = Date.now() - streamStart;
+            logger.info(`[LLM] stream 完成 (${elapsed}ms)`, {
+              model,
+              tokens: tokenCount,
+              decision: '直接回答',
+            });
             yield { type: 'done' };
             return;
           }
@@ -197,6 +286,8 @@ export class LLMService {
         }
       }
     }
+    const elapsed = Date.now() - streamStart;
+    logger.debug(`[LLM] stream 结束 (${elapsed}ms)`, { model, tokens: tokenCount });
   }
 
   async generate(

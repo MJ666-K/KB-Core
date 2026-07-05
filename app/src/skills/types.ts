@@ -22,6 +22,7 @@ export interface SkillMetadata {
 export interface SkillContext {
   params: Record<string, unknown>;
   datasetId: string;
+  datasetIds?: readonly string[];
   userId?: string;
   queryLogId?: string;
   history?: Message[];

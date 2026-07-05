@@ -1,7 +1,9 @@
 export interface ToolContext {
   datasetId: string;
+  datasetIds?: readonly string[];
   userId?: string;
   queryLogId?: string;
+  events?: import('../agent/types').EventStream;
 }
 
 export interface JSONSchemaProperty {
