@@ -14,6 +14,8 @@ const querySchema = z.object({
   denseTopKMultiplier: z.number().int().positive().max(20),
   rrfK: z.number().int().positive().max(200),
   rerankTopK: z.number().int().positive().max(100),
+  denseMinSimilarity: z.number().min(0).max(1),
+  rerankMinScore: z.number().min(0).max(1),
   agentMaxIterations: z.number().int().positive().max(20),
   agentMaxToolCalls: z.number().int().positive().max(50),
   resultCacheTtlMs: z.number().int().positive().max(3_600_000),
@@ -42,6 +44,8 @@ export function defaultRuntimeSettings(): RuntimeSettings {
       denseTopKMultiplier: config.denseTopKMultiplier,
       rrfK: config.rrfK,
       rerankTopK: config.rerankTopK,
+      denseMinSimilarity: config.denseMinSimilarity,
+      rerankMinScore: config.rerankMinScore,
       agentMaxIterations: config.agentMaxIterations,
       agentMaxToolCalls: config.agentMaxToolCalls,
       resultCacheTtlMs: config.resultCacheTtlMs,
@@ -51,12 +55,16 @@ export function defaultRuntimeSettings(): RuntimeSettings {
 
 export async function loadRuntimeSettings(): Promise<RuntimeSettings> {
   if (cached) return cached;
+  const defaults = defaultRuntimeSettings();
   try {
     const raw = await readFile(SETTINGS_PATH, 'utf-8');
-    const parsed = runtimeSettingsSchema.safeParse(JSON.parse(raw));
-    cached = parsed.success ? parsed.data : defaultRuntimeSettings();
+    const json = JSON.parse(raw) as Partial<RuntimeSettings>;
+    cached = runtimeSettingsSchema.parse({
+      chunk: { ...defaults.chunk, ...json.chunk },
+      query: { ...defaults.query, ...json.query },
+    });
   } catch {
-    cached = defaultRuntimeSettings();
+    cached = defaults;
   }
   return cached;
 }

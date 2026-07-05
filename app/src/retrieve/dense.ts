@@ -1,6 +1,7 @@
 import { db } from '../db/client';
 import { chunks } from '../db/schema';
 import { cosineDistance, sql, desc, gt, and, eq, isNotNull, inArray } from 'drizzle-orm';
+import { getQuerySettings } from '../settings/effective-config';
 
 export interface DenseHit {
   chunkId: string;
@@ -25,6 +26,7 @@ export async function denseSearch(
   const ids = resolveDatasetIds(datasetId, datasetIds);
   if (ids.length === 0) return [];
 
+  const minSimilarity = getQuerySettings().denseMinSimilarity;
   const similarity = sql<number>`1 - (${cosineDistance(chunks.embedding, queryVec)})`;
 
   const datasetFilter = ids.length === 1
@@ -44,7 +46,7 @@ export async function denseSearch(
       datasetFilter,
       eq(chunks.embeddingStatus, 'done'),
       isNotNull(chunks.embedding),
-      gt(similarity, 0.2),
+      gt(similarity, minSimilarity),
     ))
     .orderBy(desc(similarity))
     .limit(limit);

@@ -1,7 +1,7 @@
 import type { SkillContext, SkillResult } from './types';
 import type { FunctionDefinition, Message } from '../llm/llm-service';
 import type { RetrievalResult } from '../retrieve/retriever';
-import { formatCitations, deduplicateChunks, buildContext } from './types';
+import { formatCitations, deduplicateChunks, formatToolResultContent, isRetrievalResults, RETRIEVAL_FINAL_HINT, NO_RETRIEVAL_FINAL_HINT } from './types';
 import { logger } from '../utils/logger';
 
 const MAX_SKILL_ITERATIONS = 3;
@@ -50,10 +50,11 @@ export class SkillExecutor {
       const tokenBuffer: string[] = [];
       let toolCalls: import('../llm/llm-service').ToolCall[] | undefined;
 
+      const hasRetrieval = allRetrievalResults.length > 0;
       const iterMessages = isLastIter && messages.length > 2
         ? [...messages, {
             role: 'user' as const,
-            content: '你已完成所有检索。请停止继续搜索，直接基于以上所有检索到的法律条文，综合生成完整的最终分析报告。不要再提及"第X轮"、"下一步"或"进入"等检索计划用语。',
+            content: hasRetrieval ? RETRIEVAL_FINAL_HINT : NO_RETRIEVAL_FINAL_HINT,
           }]
         : messages;
 
@@ -107,13 +108,11 @@ export class SkillExecutor {
           : undefined;
         ctx.events?.emit({ type: 'tool_call_end', name: call.function.name, summary });
 
-        if (this.isRetrievalResultArray(result)) {
+        if (isRetrievalResults(result)) {
           allRetrievalResults.push(...result);
         }
 
-        const content = this.isRetrievalResultArray(result)
-          ? buildContext(result)
-          : JSON.stringify(result);
+        const content = formatToolResultContent(result, call.function.name);
         messages.push({
           role: 'tool', tool_call_id: call.id,
           content: content.length <= 8000 ? content : content.slice(0, 8000) + '\n[...截断...]',
@@ -122,7 +121,10 @@ export class SkillExecutor {
     }
 
     logger.warn(`[SkillExecutor] max ${MAX_SKILL_ITERATIONS} iterations, forcing answer`);
-    const forceMessages = [...messages, { role: 'user' as const, content: '请基于以上信息给出最终回答。' }];
+    const forceHint = allRetrievalResults.length > 0
+      ? '请基于以上检索到的法律条文给出最终回答。'
+      : NO_RETRIEVAL_FINAL_HINT;
+    const forceMessages = [...messages, { role: 'user' as const, content: forceHint }];
     const answer = await this.streamFinalAnswer(ctx, forceMessages);
     const deduped = deduplicateChunks(allRetrievalResults);
     return { answer, citations: formatCitations(deduped), toolCalls: allToolCalls };
@@ -151,15 +153,6 @@ export class SkillExecutor {
     }
     ctx.events.emit({ type: 'answer_end' });
     return tokenBuffer.join('');
-  }
-
-  private isRetrievalResultArray(result: unknown): result is RetrievalResult[] {
-    if (!Array.isArray(result)) return false;
-    if (result.length === 0) return false;
-    const first = result[0];
-    return typeof first === 'object' && first !== null &&
-      'chunkId' in first && 'text' in first && 'score' in first &&
-      'documentId' in first && 'documentTitle' in first;
   }
 
   private filterToolDefs(tools: SkillContext['tools'], allowed: readonly string[]): FunctionDefinition[] {

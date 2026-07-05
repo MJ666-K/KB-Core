@@ -17,6 +17,15 @@ interface ParsedSkill {
   instructions: string;
 }
 
+const SKILL_DISPLAY_NAMES: Record<string, string> = {
+  chat: '智能回复',
+  qa: '法律问答',
+  search: '法条检索',
+  multihop: '深度分析',
+  compare: '对比分析',
+  summary: '要点总结',
+};
+
 async function parseSkillMdFile(skillDir: string): Promise<ParsedSkill | null> {
   const skillMdPath = join(skillDir, 'SKILL.md');
   let content: string;
@@ -42,7 +51,7 @@ async function parseSkillMdFile(skillDir: string): Promise<ParsedSkill | null> {
 
   return {
     name: front.name,
-    displayName: front.name,
+    displayName: SKILL_DISPLAY_NAMES[front.name] ?? front.name,
     description: front.description,
     tools: front.tools ?? [],
     parameters: params as Record<string, unknown>,

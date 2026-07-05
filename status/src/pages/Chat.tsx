@@ -1,8 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Input, Button, Card, Space, Collapse, Tag, Spin } from 'antd';
-import { SendOutlined, PaperClipOutlined, RobotOutlined, UserOutlined } from '@ant-design/icons';
+import { Input, Button, Card, Space, Tag, Typography } from 'antd';
+import { SendOutlined, PaperClipOutlined, RobotOutlined, UserOutlined, LoadingOutlined } from '@ant-design/icons';
+import { api } from '../api';
+import MarkdownContent from '../MarkdownContent';
+import { actionLabel, statusMessage, aggregateCalls } from '../chatLabels';
 
 const { TextArea } = Input;
+const { Text } = Typography;
 
 interface Citation {
   chunkId: string;
@@ -14,6 +18,8 @@ interface Citation {
 
 interface SubAgent { name: string; displayName: string }
 
+type MsgPhase = 'idle' | 'thinking' | 'tool' | 'writing' | 'done' | 'error';
+
 interface AgentMsg {
   id: string;
   role: 'user' | 'assistant';
@@ -24,7 +30,7 @@ interface AgentMsg {
   citations: Citation[];
   latencyMs?: number;
   termination?: string;
-  streaming?: boolean;
+  phase: MsgPhase;
 }
 
 const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/query`;
@@ -39,159 +45,235 @@ const HINTS = [
   '离婚财产分割的法律依据？',
 ];
 
+const emptyAssistant = (): AgentMsg => ({
+  id: newId(),
+  role: 'assistant',
+  content: '',
+  thinking: [],
+  toolCalls: [],
+  subAgents: [],
+  citations: [],
+  phase: 'thinking',
+});
+
 export default function Chat() {
   const [question, setQuestion] = useState('');
-  const [, setHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
   const [messages, setMessages] = useState<AgentMsg[]>([]);
   const [loading, setLoading] = useState(false);
+  const [skillLabels, setSkillLabels] = useState<Map<string, string>>(new Map());
   const wsRef = useRef<WebSocket | null>(null);
-  const currentRef = useRef<AgentMsg | null>(null);
+  const assistantIdRef = useRef<string | null>(null);
+  const finishedRef = useRef(false);
   const endRef = useRef<HTMLDivElement>(null);
   const historyRef = useRef<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+
+  useEffect(() => {
+    api.getSkills()
+      .then(r => {
+        const map = new Map<string, string>();
+        for (const s of r.skills ?? []) {
+          if (s.name && s.displayName) map.set(s.name, s.displayName);
+        }
+        setSkillLabels(map);
+      })
+      .catch(() => { /* 使用本地 fallback 标签 */ });
+  }, []);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages]);
 
-  useEffect(() => {
-    return () => { wsRef.current?.close(); };
+  useEffect(() => () => { wsRef.current?.close(); }, []);
+
+  const patchAssistant = useCallback((fn: (m: AgentMsg) => AgentMsg) => {
+    const id = assistantIdRef.current;
+    if (!id) return;
+    setMessages(prev => prev.map(msg => (msg.id === id ? fn(msg) : msg)));
   }, []);
 
-  const updateCurrent = (fn: (m: AgentMsg) => AgentMsg) => {
-    if (!currentRef.current) return;
-    currentRef.current = fn(currentRef.current);
-    setMessages(prev => [...prev].map((msg, i) => i === prev.length - 1 ? currentRef.current! : msg));
-  };
+  const finishAssistant = useCallback((patch: Partial<AgentMsg> & { content: string }) => {
+    const id = assistantIdRef.current;
+    if (!id) return;
+    finishedRef.current = true;
+    setMessages(prev => prev.map(msg => (
+      msg.id === id ? { ...msg, ...patch, phase: patch.phase ?? 'done' } : msg
+    )));
+    historyRef.current = [...historyRef.current, { role: 'assistant', content: patch.content }];
+    assistantIdRef.current = null;
+    setLoading(false);
+  }, []);
 
-  const handleMsg = (data: Record<string, unknown>) => {
-    const sub = data.subAgent as SubAgent | undefined;
+  const handleMsg = useCallback((data: Record<string, unknown>) => {
     const type = data.type as string;
-    const m = currentRef.current;
-    if (!m) return;
+    const sub = data.subAgent as SubAgent | undefined;
+    const token = data.token as string | undefined;
 
-    if (sub) {
-      if (!m.subAgents.find(s => s.name === sub.name)) {
-        updateCurrent(msg => ({ ...msg, subAgents: [...msg.subAgents, sub!] }));
-      }
-      if (type === 'thinking') {
-        const token = data.token as string | undefined;
-        if (token) updateCurrent(msg => ({ ...msg, thinking: [...msg.thinking, `[${sub.displayName}] ${token}`] }));
-      } else if (type === 'step') {
-        updateCurrent(msg => ({ ...msg, toolCalls: [...msg.toolCalls, { name: data.action as string, kind: data.kind as string, done: false }] }));
-      } else if (type === 'step_end') {
-        const name = data.action as string;
-        updateCurrent(msg => ({ ...msg, toolCalls: msg.toolCalls.map(t => t.name === name && !t.done ? { ...t, done: true } : t) }));
-      }
+    const apply = (fn: (m: AgentMsg) => AgentMsg) => patchAssistant(fn);
+
+    if (type === 'thinking_start') {
+      apply(msg => ({ ...msg, phase: 'thinking' }));
       return;
     }
-
-    if (type === 'thinking') {
-      const token = data.token as string | undefined;
-      if (token) updateCurrent(msg => ({ ...msg, thinking: [...msg.thinking, token] }));
-    } else if (type === 'step') {
-      updateCurrent(msg => ({ ...msg, toolCalls: [...msg.toolCalls, { name: data.action as string, kind: data.kind as string, done: false }] }));
-    } else if (type === 'step_end') {
-      const name = data.action as string;
-      updateCurrent(msg => ({ ...msg, toolCalls: msg.toolCalls.map(t => t.name === name && !t.done ? { ...t, done: true } : t) }));
-    } else if (type === 'token') {
-      const token = data.token as string | undefined;
-      if (token) updateCurrent(msg => ({ ...msg, content: msg.content + token, streaming: true }));
-    } else if (type === 'result') {
-      const citations = (data.citations as Citation[]) ?? [];
-      const latencyMs = data.latencyMs as number;
-      const termination = data.termination as string;
-      const finalContent = m.content || (data.answer as string) || '';
-      updateCurrent(msg => ({ ...msg, content: finalContent, citations, latencyMs, termination, streaming: false }));
-      historyRef.current = [...historyRef.current, { role: 'assistant', content: finalContent }];
-      setHistory(historyRef.current);
-      currentRef.current = null;
-      setLoading(false);
-    } else if (type === 'error') {
-      updateCurrent(msg => ({ ...msg, content: `❌ ${data.error as string}`, streaming: false }));
-      currentRef.current = null;
-      setLoading(false);
+    if (type === 'thinking_end') return;
+    if (type === 'thinking' && token) {
+      apply(msg => ({
+        ...msg,
+        phase: 'thinking',
+        thinking: [...msg.thinking, sub ? `[${sub.displayName}] ${token}` : token],
+      }));
+      return;
     }
-  };
+    if (type === 'step') {
+      apply(msg => ({
+        ...msg,
+        phase: 'tool',
+        subAgents: sub && !msg.subAgents.find(s => s.name === sub.name)
+          ? [...msg.subAgents, sub]
+          : msg.subAgents,
+        toolCalls: [...msg.toolCalls, { name: data.action as string, kind: data.kind as string, done: false }],
+      }));
+      return;
+    }
+    if (type === 'step_end') {
+      const name = data.action as string;
+      apply(msg => ({
+        ...msg,
+        toolCalls: msg.toolCalls.map(t => (t.name === name && !t.done ? { ...t, done: true } : t)),
+      }));
+      return;
+    }
+    if (type === 'answer_start') {
+      apply(msg => ({ ...msg, phase: 'writing' }));
+      return;
+    }
+    if (type === 'token' && token) {
+      apply(msg => ({ ...msg, phase: 'writing', content: msg.content + token }));
+      return;
+    }
+    if (type === 'answer_end') return;
+    if (type === 'result') {
+      const answer = typeof data.answer === 'string' ? data.answer : '';
+      const citations = (data.citations as Citation[]) ?? [];
+      finishAssistant({
+        content: answer,
+        citations,
+        latencyMs: data.latencyMs as number | undefined,
+        termination: data.termination as string | undefined,
+        phase: 'done',
+      });
+      return;
+    }
+    if (type === 'error') {
+      const detail = data.detail ? `: ${JSON.stringify(data.detail)}` : '';
+      finishAssistant({
+        content: `❌ ${data.error as string}${detail}`,
+        phase: 'error',
+      });
+    }
+  }, [patchAssistant, finishAssistant]);
 
-  const send = useCallback(async (q?: string) => {
+  const handleMsgRef = useRef(handleMsg);
+  handleMsgRef.current = handleMsg;
+
+  const bindWs = useCallback((ws: WebSocket) => {
+    ws.onmessage = (ev) => {
+      try {
+        handleMsgRef.current(JSON.parse(ev.data as string) as Record<string, unknown>);
+      } catch { /* ignore */ }
+    };
+    ws.onerror = () => {
+      if (assistantIdRef.current && !finishedRef.current) {
+        finishAssistant({ content: '❌ 连接失败，请检查后端服务', phase: 'error' });
+      }
+    };
+    ws.onclose = () => {
+      if (assistantIdRef.current && !finishedRef.current) {
+        patchAssistant(msg => ({
+          ...msg,
+          content: msg.content || '⚠️ 连接已断开',
+          phase: 'error',
+        }));
+        assistantIdRef.current = null;
+        setLoading(false);
+      }
+    };
+  }, [finishAssistant, patchAssistant]);
+
+  const send = useCallback((q?: string) => {
     const text = (q ?? question).trim();
     if (!text || loading) return;
 
-    const userMsg: AgentMsg = { id: newId(), role: 'user', content: text, thinking: [], toolCalls: [], subAgents: [], citations: [] };
-    const botMsg: AgentMsg = { id: newId(), role: 'assistant', content: '', thinking: [], toolCalls: [], subAgents: [], citations: [], streaming: true };
+    const userMsg: AgentMsg = {
+      id: newId(), role: 'user', content: text,
+      thinking: [], toolCalls: [], subAgents: [], citations: [], phase: 'done',
+    };
+    const botMsg = emptyAssistant();
+
+    assistantIdRef.current = botMsg.id;
+    finishedRef.current = false;
     setMessages(prev => [...prev, userMsg, botMsg]);
-    currentRef.current = botMsg;
     historyRef.current = [...historyRef.current, { role: 'user', content: text }];
-    setHistory(historyRef.current);
     setQuestion('');
     setLoading(true);
 
-    const sendQuery = (ws: WebSocket) => {
-      ws.send(JSON.stringify({ type: 'query', question: text, options: { history: historyRef.current.slice(-20), topK: 5 } }));
-    };
+    const payload = JSON.stringify({
+      type: 'query',
+      question: text,
+      options: { history: historyRef.current.slice(0, -1).slice(-20), topK: 5 },
+    });
 
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+    const sendQuery = (ws: WebSocket) => { ws.send(payload); };
+
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      bindWs(wsRef.current);
       sendQuery(wsRef.current);
       return;
     }
 
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
-
+    bindWs(ws);
     ws.onopen = () => { sendQuery(ws); };
-    ws.onmessage = ev => { try { handleMsg(JSON.parse(ev.data)); } catch { } };
-    ws.onerror = () => {
-      if (currentRef.current) {
-        updateCurrent(msg => ({ ...msg, content: '❌ 连接失败，请检查后端服务', streaming: false }));
-        currentRef.current = null;
-        setLoading(false);
-      }
-    };
-    ws.onclose = () => {
-      if (currentRef.current && currentRef.current.streaming) {
-        updateCurrent(msg => ({ ...msg, content: msg.content || '⚠️ 连接已断开', streaming: false }));
-        currentRef.current = null;
-        setLoading(false);
-      }
-    };
-  }, [question, loading]);
+  }, [question, loading, bindWs]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 96px)' }}>
-      <Card bordered={false} style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0 } }}>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+    <div className="kc-chat">
+      <Card bordered={false} className="kc-chat-card" styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0 } }}>
+        <div className="kc-chat-messages">
           {messages.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '80px 20px' }}>
-              <div style={{ fontSize: 48, marginBottom: 16 }}>⚖️</div>
-              <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>智能问答</div>
-              <div style={{ color: '#00000073', fontSize: 13, marginBottom: 24 }}>输入法律问题，系统自动选择专家智能体解答</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+            <div className="kc-chat-empty">
+              <div className="kc-chat-empty-icon">⚖️</div>
+              <div className="kc-chat-empty-title">法律助手</div>
+              <Text type="secondary">输入法律问题，系统自动选择专家智能体解答</Text>
+              <div className="kc-chat-hints">
                 {HINTS.map(h => (
-                  <div key={h} style={{ background: '#f5f5f5', border: '1px solid #d9d9d9', borderRadius: 16, padding: '6px 14px', fontSize: 12, cursor: 'pointer', transition: 'all 0.15s' }}
-                    onClick={() => send(h)}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#1677ff'; e.currentTarget.style.color = '#1677ff'; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#d9d9d9'; e.currentTarget.style.color = 'inherit'; }}
-                  >{h}</div>
+                  <button key={h} type="button" className="kc-chat-hint" onClick={() => send(h)}>{h}</button>
                 ))}
               </div>
             </div>
           )}
-          {messages.map(m => <MsgBubble key={m.id} msg={m} />)}
+          {messages.map(m => <MsgBubble key={m.id} msg={m} skillLabels={skillLabels} />)}
           <div ref={endRef} />
         </div>
 
-        <div style={{ padding: '12px 20px', borderTop: '1px solid #f0f0f0', flexShrink: 0 }}>
+        <div className="kc-chat-input-bar">
           <Space.Compact style={{ width: '100%' }}>
             <TextArea
               value={question}
               onChange={e => setQuestion(e.target.value)}
               onPressEnter={e => { if (!e.shiftKey) { e.preventDefault(); send(); } }}
-              placeholder="输入法律问题..."
+              placeholder="输入法律问题，Enter 发送，Shift+Enter 换行..."
               autoSize={{ minRows: 1, maxRows: 4 }}
               disabled={loading}
-              style={{ borderRadius: '6px 0 0 6px' }}
+              style={{ borderRadius: '8px 0 0 8px' }}
             />
-            <Button type="primary" icon={<SendOutlined />} onClick={() => send()} disabled={loading || !question.trim()} style={{ height: 'auto', minHeight: 36 }}>
+            <Button
+              type="primary"
+              icon={loading ? <LoadingOutlined /> : <SendOutlined />}
+              onClick={() => send()}
+              disabled={loading || !question.trim()}
+              style={{ height: 'auto', minHeight: 40, borderRadius: '0 8px 8px 0' }}
+            >
               {loading ? '回答中' : '发送'}
             </Button>
           </Space.Compact>
@@ -201,63 +283,104 @@ export default function Chat() {
   );
 }
 
-function MsgBubble({ msg }: { msg: AgentMsg }) {
+function StatusLine({ msg }: { msg: AgentMsg }) {
+  if (msg.phase === 'done' || msg.phase === 'error' || msg.phase === 'idle') return null;
+  if (msg.phase === 'writing' && msg.content) return null;
+
+  const running = msg.toolCalls.find(t => !t.done);
+  const text = statusMessage(msg.phase, running?.name, running?.kind);
+
+  return (
+    <div className="kc-chat-status">
+      <LoadingOutlined spin /> {text}
+    </div>
+  );
+}
+
+function DoneActions({
+  msg,
+  skillLabels,
+}: {
+  msg: AgentMsg;
+  skillLabels: Map<string, string>;
+}) {
+  const aggregated = aggregateCalls(msg.toolCalls);
+  if (aggregated.length === 0) return null;
+
+  return (
+    <div className="kc-chat-tools">
+      {aggregated.map(({ name, kind, count }) => {
+        const isSkill = kind === 'skill';
+        const cls = `kc-chat-tool-tag ${isSkill ? 'kc-chat-tool-skill' : 'kc-chat-tool-tool'}`;
+        const label = actionLabel(name, skillLabels);
+        return (
+          <span key={name} className={cls}>
+            {label}{count > 1 ? ` ×${count}` : ''}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function MsgBubble({ msg, skillLabels }: { msg: AgentMsg; skillLabels: Map<string, string> }) {
   if (msg.role === 'user') {
     return (
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16, gap: 10 }}>
-        <div style={{ background: '#1677ff', color: 'white', padding: '10px 14px', borderRadius: '14px 14px 4px 14px', maxWidth: '70%', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.content}</div>
-        <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#1677ff', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 14 }}><UserOutlined /></div>
+      <div className="kc-chat-row kc-chat-row-user">
+        <div className="kc-chat-bubble-user">{msg.content}</div>
+        <div className="kc-chat-avatar kc-chat-avatar-user"><UserOutlined /></div>
       </div>
     );
   }
 
+  const isDone = msg.phase === 'done' || msg.phase === 'error';
+  const totalCalls = msg.toolCalls.length;
+
   return (
-    <div style={{ display: 'flex', marginBottom: 20, gap: 10 }}>
-      <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#f0f5ff', color: '#1677ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1px solid #d6e4ff', fontSize: 14 }}><RobotOutlined /></div>
-      <div style={{ background: '#fff', border: '1px solid #f0f0f0', borderRadius: '14px 14px 14px 4px', padding: '14px 16px', maxWidth: '85%' }}>
+    <div className="kc-chat-row kc-chat-row-bot">
+      <div className="kc-chat-avatar kc-chat-avatar-bot"><RobotOutlined /></div>
+      <div className="kc-chat-bubble-agent">
         {msg.subAgents.length > 0 && (
           <Space size={4} style={{ marginBottom: 8 }} wrap>
-            {msg.subAgents.map(s => <Tag key={s.name} color="blue">📡 {s.displayName}</Tag>)}
+            {msg.subAgents.map(s => <Tag key={s.name} color="blue">{s.displayName}</Tag>)}
           </Space>
         )}
-        {msg.thinking.length > 0 && (
-          <Collapse size="small" style={{ marginBottom: 10, background: '#fafafa' }} bordered={false}>
-            <Collapse.Panel header="💭 思考过程" key="t">
-              <pre style={{ fontSize: 11, color: '#00000073', whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'ui-monospace, Menlo, monospace' }}>{msg.thinking.join('')}</pre>
-            </Collapse.Panel>
-          </Collapse>
-        )}
-        {msg.toolCalls.length > 0 && (
-          <div style={{ marginBottom: 10 }}>
-            {msg.toolCalls.map((t, i) => (
-              <Tag key={i} color={t.done ? 'success' : 'processing'} style={{ marginBottom: 4 }}>
-                {t.done ? '✅' : <Spin size="small" style={{ marginRight: 4 }} />}
-                {t.name}
-                <Tag color="default" bordered={false} style={{ marginLeft: 4, padding: '0 6px' }}>{t.kind}</Tag>
-              </Tag>
-            ))}
+
+        <StatusLine msg={msg} />
+
+        {isDone && <DoneActions msg={msg} skillLabels={skillLabels} />}
+
+        {msg.content ? (
+          <div className="kc-chat-answer">
+            {msg.phase === 'error' ? (
+              <span>{msg.content}</span>
+            ) : (
+              <MarkdownContent content={msg.content} />
+            )}
+            {msg.phase === 'writing' && <span className="kc-chat-cursor">▍</span>}
           </div>
-        )}
-        <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7, fontSize: 14 }}>
-          {msg.content || (msg.streaming && <Spin size="small" />)}
-        </div>
+        ) : null}
+
         {msg.citations.length > 0 && (
-          <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px dashed #f0f0f0' }}>
-            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>
-              <PaperClipOutlined style={{ marginRight: 6, color: '#1677ff' }} />引用 ({msg.citations.length})
+          <div className="kc-chat-citations">
+            <div className="kc-chat-citations-title">
+              <PaperClipOutlined /> 引用 ({msg.citations.length})
             </div>
             {msg.citations.map((c, i) => (
-              <div key={i} style={{ fontSize: 12, padding: '8px 10px', background: '#fafafa', borderRadius: 6, marginBottom: 6, borderLeft: '3px solid #1677ff' }}>
-                <span style={{ color: '#1677ff', fontWeight: 600, fontFamily: 'monospace', marginRight: 8 }}>[{c.score.toFixed(2)}]</span>
-                <strong>{c.documentTitle}</strong>
-                <div style={{ marginTop: 4, color: '#00000073' }}>{c.excerpt.slice(0, 120)}</div>
+              <div key={i} className="kc-chat-citation-item">
+                <span className="kc-chat-citation-score">[{Number(c.score ?? 0).toFixed(2)}]</span>
+                <strong>{c.documentTitle || '未知文档'}</strong>
+                <div className="kc-chat-citation-excerpt">{(c.excerpt ?? '').slice(0, 160)}</div>
               </div>
             ))}
           </div>
         )}
+
         {msg.latencyMs !== undefined && (
-          <div style={{ fontSize: 11, color: '#00000045', marginTop: 10 }}>
-            ⏱ {msg.latencyMs}ms · {msg.termination} · {msg.citations.length} 引用
+          <div className="kc-chat-meta">
+            {(msg.latencyMs / 1000).toFixed(1)}s
+            {totalCalls > 0 && <> · 调用 {totalCalls} 次</>}
+            {msg.citations.length > 0 && <> · {msg.citations.length} 条引用</>}
           </div>
         )}
       </div>

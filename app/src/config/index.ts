@@ -29,6 +29,8 @@ const envSchema = z.object({
   denseTopKMultiplier: z.coerce.number().int().positive().default(3),
   rrfK: z.coerce.number().int().positive().default(60),
   rerankTopK: z.coerce.number().int().positive().default(20),
+  denseMinSimilarity: z.coerce.number().min(0).max(1).default(0.35),
+  rerankMinScore: z.coerce.number().min(0).max(1).default(0.5),
 
   agentMaxIterations: z.coerce.number().int().positive().default(5),
   agentMaxToolCalls: z.coerce.number().int().positive().default(10),
@@ -61,6 +63,8 @@ const rawEnv = {
   denseTopKMultiplier: process.env.DENSE_TOP_K_MULTIPLIER,
   rrfK: process.env.RRF_K,
   rerankTopK: process.env.RERANK_TOP_K,
+  denseMinSimilarity: process.env.DENSE_MIN_SIMILARITY,
+  rerankMinScore: process.env.RERANK_MIN_SCORE,
   agentMaxIterations: process.env.AGENT_MAX_ITERATIONS,
   agentMaxToolCalls: process.env.AGENT_MAX_TOOL_CALLS,
   embeddingCacheMax: process.env.EMBEDDING_CACHE_MAX,

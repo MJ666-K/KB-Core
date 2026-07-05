@@ -102,7 +102,7 @@ export default function Dashboard() {
         style={{ marginTop: 24 }}
       >
         <Typography.Paragraph>
-          这是一个基于 Agent 架构的法律知识库管理系统。您可以通过左侧导航栏管理智能体、模型、Skills、文档，或直接进入智能问答体验。
+          这是一个基于 Agent 架构的法律知识库管理系统。您可以通过左侧导航栏管理智能体、模型、Skills、文档，或直接进入法律助手体验。
         </Typography.Paragraph>
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
           提示：在开始之前，请确保已上传文档并完成向量化嵌入。

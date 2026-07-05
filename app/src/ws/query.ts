@@ -95,7 +95,7 @@ export const queryWebSocket = {
         emit(event) {
           switch (event.type) {
             case 'thinking_start':
-              send(ws, { type: 'thinking', subAgent: event.subAgent });
+              send(ws, { type: 'thinking_start', subAgent: event.subAgent });
               break;
             case 'thinking_token':
               send(ws, { type: 'thinking', token: event.token, subAgent: event.subAgent });

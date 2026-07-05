@@ -13,6 +13,8 @@ interface SettingsPayload {
       denseTopKMultiplier: number;
       rrfK: number;
       rerankTopK: number;
+      denseMinSimilarity: number;
+      rerankMinScore: number;
       agentMaxIterations: number;
       agentMaxToolCalls: number;
       resultCacheTtlMs: number;
@@ -132,6 +134,12 @@ export default function Settings() {
                   </Form.Item>
                   <Form.Item name="rerankTopK" label="Rerank 候选数" rules={[{ required: true }]}>
                     <InputNumber min={1} max={100} style={{ width: '100%' }} />
+                  </Form.Item>
+                  <Form.Item name="denseMinSimilarity" label="向量召回最低相似度" rules={[{ required: true }]} tooltip="0~1，低于此值的 dense 结果丢弃">
+                    <InputNumber min={0} max={1} step={0.05} style={{ width: '100%' }} />
+                  </Form.Item>
+                  <Form.Item name="rerankMinScore" label="Rerank 最低分数" rules={[{ required: true }]} tooltip="0~1，重排序后低于此值的结果丢弃">
+                    <InputNumber min={0} max={1} step={0.05} style={{ width: '100%' }} />
                   </Form.Item>
                   <Form.Item name="agentMaxIterations" label="Agent 最大迭代" rules={[{ required: true }]}>
                     <InputNumber min={1} max={20} style={{ width: '100%' }} />

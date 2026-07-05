@@ -9,6 +9,7 @@ import { EmbeddingService } from '../embedding/embedding-service';
 import { config } from '../config';
 import { getQuerySettings } from '../settings/effective-config';
 import { TTLCache } from '../cache/ttl-cache';
+import { logger } from '../utils/logger';
 
 export interface RetrievalResult {
   chunkId: string;
@@ -112,12 +113,24 @@ export class HybridRetriever {
     const candidateIds = fused.slice(0, q.rerankTopK).map(f => f[0]);
     const candidates = await this.loadCandidates(candidateIds, denseHits);
     const { results: reranked, fallback: rerankFallback } = await this.reranker.rank(query, candidates, topK);
-    const rerankScoreMap = new Map(reranked.map((r, i) => [r.chunkId, { score: r.score, rank: i }]));
+    const scoreFiltered = reranked.filter(r => passesScoreFilter(
+      r.chunkId, r.score, rerankFallback, denseMap, sparseMap, q,
+    ));
+    if (scoreFiltered.length < reranked.length) {
+      logger.info('[检索] 分数阈值过滤', {
+        before: reranked.length,
+        after: scoreFiltered.length,
+        denseMin: q.denseMinSimilarity,
+        rerankMin: q.rerankMinScore,
+        rerankFallback,
+      });
+    }
+    const rerankScoreMap = new Map(scoreFiltered.map((r, i) => [r.chunkId, { score: r.score, rank: i }]));
 
     const seen = new Set<string>();
     const finalIds = new Set<string>();
     const results: RetrievalResult[] = [];
-    for (const r of reranked) {
+    for (const r of scoreFiltered) {
       const key = r.parentId ?? r.chunkId;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -135,7 +148,7 @@ export class HybridRetriever {
 
     await this.fillTitles(results);
 
-    const candidatesDetail: RetrievalCandidateDetail[] = reranked.map((r, i) => ({
+    const candidatesDetail: RetrievalCandidateDetail[] = scoreFiltered.map((r, i) => ({
       chunkId: r.chunkId,
       documentId: r.documentId,
       content: r.text.slice(0, 200),
@@ -159,7 +172,7 @@ export class HybridRetriever {
         denseCount: denseHits.length,
         sparseCount: sparseHits.length,
         rrfCount: fused.length,
-        rerankCount: reranked.length,
+        rerankCount: scoreFiltered.length,
         rerankFallback,
         candidates: candidatesDetail,
       },
@@ -212,4 +225,20 @@ export class HybridRetriever {
       r.documentTitle = titleMap.get(r.documentId) ?? '';
     }
   }
+}
+
+function passesScoreFilter(
+  chunkId: string,
+  score: number,
+  rerankFallback: boolean,
+  denseMap: Map<string, number>,
+  sparseMap: Map<string, number>,
+  q: ReturnType<typeof getQuerySettings>,
+): boolean {
+  if (rerankFallback) {
+    const dense = denseMap.get(chunkId);
+    if (dense !== undefined) return dense >= q.denseMinSimilarity;
+    return sparseMap.has(chunkId);
+  }
+  return score >= q.rerankMinScore;
 }
