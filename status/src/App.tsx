@@ -25,7 +25,7 @@ const menuItems = [
   { key: '/agents', icon: <RobotOutlined />, label: '智能体', title: '智能体', subtitle: '路由子智能体与领域专家配置' },
   { key: '/models', icon: <ApiOutlined />, label: '模型', title: '模型', subtitle: 'LLM 模型与推理参数管理' },
   { key: '/skills', icon: <ToolOutlined />, label: 'Skills', title: 'Skills', subtitle: 'Agent 高级任务单元' },
-  { key: '/documents', icon: <FileTextOutlined />, label: '文档', title: '文档', subtitle: '知识库文档管理与切片状态' },
+  { key: '/documents', icon: <FileTextOutlined />, label: '文档', title: '文档', subtitle: '上传 · 刷新 · 重新嵌入 · 删除' },
   { key: '/chat', icon: <MessageOutlined />, label: '智能问答', title: '智能问答', subtitle: '流式对话 · 子智能体路由' },
 ];
 

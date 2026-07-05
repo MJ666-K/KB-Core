@@ -144,20 +144,32 @@ export default function Documents() {
         <div className="kc-toolbar">
           <Button type="primary" icon={<UploadOutlined />} onClick={() => { setUploadOpen(true); setFileList([]); }}>上传文档</Button>
           <Button icon={<ReloadOutlined />} onClick={load}>刷新</Button>
+          <Button
+            icon={<ReloadOutlined />}
+            disabled={selectedKeys.length === 0}
+            onClick={() => {
+              if (selectedKeys.length === 0) { message.warning('请先选择文档'); return; }
+              onBatchReingest();
+            }}
+          >
+            重新嵌入{selectedKeys.length > 0 ? ` (${selectedKeys.length})` : ''}
+          </Button>
+          <Popconfirm
+            title={`确认删除 ${selectedKeys.length} 个文档？`}
+            onConfirm={onBatchDelete}
+            okText="确认删除"
+            cancelText="取消"
+            okButtonProps={{ danger: true }}
+          >
+            <Button danger icon={<DeleteOutlined />} disabled={selectedKeys.length === 0}>
+              删除{selectedKeys.length > 0 ? ` (${selectedKeys.length})` : ''}
+            </Button>
+          </Popconfirm>
+          {selectedKeys.length > 0 && (
+            <Button type="link" onClick={() => setSelectedKeys([])}>取消选择</Button>
+          )}
           <Input placeholder="搜索文档标题..." prefix={<SearchOutlined />} value={search} onChange={e => setSearch(e.target.value)} allowClear style={{ width: 240, marginLeft: 'auto' }} />
         </div>
-        {selectedKeys.length > 0 && (
-          <div style={{ padding: '8px 12px', marginBottom: 12, background: '#e6f4ff', border: '1px solid #91caff', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ color: '#1677ff', fontSize: 13, fontWeight: 500 }}>已选 {selectedKeys.length} 项</span>
-            <Space>
-              <Button size="small" icon={<ReloadOutlined />} onClick={onBatchReingest}>重新嵌入</Button>
-              <Popconfirm title={`确认删除 ${selectedKeys.length} 个文档？`} onConfirm={onBatchDelete} okText="确认删除" cancelText="取消" okButtonProps={{ danger: true }}>
-                <Button size="small" danger icon={<DeleteOutlined />}>批量删除</Button>
-              </Popconfirm>
-            </Space>
-            <Button size="small" type="text" onClick={() => setSelectedKeys([])} style={{ marginLeft: 'auto' }}>取消选择</Button>
-          </div>
-        )}
         <Table
           dataSource={filtered}
           columns={cols}

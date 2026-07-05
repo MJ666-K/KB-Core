@@ -54,7 +54,7 @@
 - `#/` — Dashboard：文档数/切片数/查询数/数据集分布
 - `#/agents` — 智能体管理：列表 + 创建/编辑 modal（含 system_prompt 大文本 + datasetIds 多选）
 - `#/skills` — Skill 管理：列表 + 创建/编辑 modal（含 instructions 编辑 + 实时 md 预览 + parameters JSON Schema）
-- `#/documents` — 文档列表：拖拽上传 + 数据集/状态筛选 + 重切割按钮
+- `#/documents` — 文档列表：工具栏（上传 / 刷新 / 重新嵌入 / 删除）+ 数据集/状态筛选
 - `#/documents/:id` — 文档详情：原文左栏（切片高亮 + 点击定位） + 切片列表右栏（含所有参数）
 - `#/chat` — 流式问答：自动智能体路由 + 工具调用进度 + citations + 高级参数折叠
 
