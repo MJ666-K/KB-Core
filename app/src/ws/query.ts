@@ -140,6 +140,9 @@ export const queryWebSocket = {
             case 'answer_end':
               send(ws, { type: 'answer_end' });
               break;
+            case 'follow_up':
+              send(ws, { type: 'follow_up', questions: event.questions });
+              break;
             case 'result_end':
               break;
           }
@@ -163,6 +166,20 @@ export const queryWebSocket = {
         iterations: result.steps.length,
       });
       send(ws, { type: 'result', ...result });
+
+      // 推荐追问异步生成，不阻塞 result 返回
+      void agent.generateFollowUpSuggestions(body.question, result, {
+        datasetId,
+        topK: body.options?.topK,
+        maxIterations: body.options?.maxIterations,
+        history,
+      }).then(questions => {
+        if (questions.length > 0) {
+          send(ws, { type: 'follow_up', questions });
+        }
+      }).catch(err => {
+        logger.warn(`[WS:${queryId}] follow-up generation failed`, err);
+      });
     } catch (err) {
       const elapsed = Date.now() - startTime;
       logger.error(`[WS:${queryId}] 查询失败 (${elapsed}ms)`, err);

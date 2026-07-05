@@ -6,17 +6,21 @@ import datasetsRouter from './datasets';
 import statsRouter from './stats';
 import modelsRouter from './models';
 import chatRouter from './chat';
+import sessionsRouter from './sessions';
 import settingsRouter from './settings';
+import skillMetaRouter from './skill-meta';
 import { getSubAgentRegistry } from '../agent/sub-agent-registry';
 
 export function mountApiRoutes(app: Hono): void {
   app.route('/api/agents', agentsRouter);
   app.route('/api/skills', skillsRouter);
+  app.route('/api/skill-meta', skillMetaRouter);
   app.route('/api/documents', documentsRouter);
   app.route('/api/datasets', datasetsRouter);
   app.route('/api/stats', statsRouter);
   app.route('/api/models', modelsRouter);
   app.route('/api/chat', chatRouter);
+  app.route('/api/sessions', sessionsRouter);
   app.route('/api/settings', settingsRouter);
   app.post('/api/reload', async (c) => {
     try {

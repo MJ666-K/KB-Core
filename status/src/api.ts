@@ -36,6 +36,8 @@ export const api = {
     fetch(`/api/skills/${id}`, { method: 'PUT', headers, body: JSON.stringify(data) }).then(r => r.ok ? r.json() : Promise.reject(new Error('更新失败'))),
   deleteSkill: (id: string) =>
     fetch(`/api/skills/${id}`, { method: 'DELETE' }).then(r => r.ok ? r.json() : Promise.reject(new Error('删除失败'))),
+  getSkillToolOptions: () =>
+    fetch('/api/skill-meta/tool-options').then(json<{ tools: Array<{ name: string; description: string }> }>),
 
   getDocuments: () => fetch('/api/documents').then(json<{ documents: any[] }>),
   getDocument: (id: string) => fetch(`/api/documents/${id}`).then(json<any>),
@@ -55,4 +57,37 @@ export const api = {
   getSettings: () => fetch('/api/settings').then(json<{ settings: Record<string, unknown>; defaults: Record<string, unknown> }>),
   updateSettings: (data: Record<string, unknown>) =>
     fetch('/api/settings', { method: 'PUT', headers, body: JSON.stringify(data) }).then(r => r.ok ? r.json() : Promise.reject(new Error('保存失败'))),
+
+  getSessions: () => fetch('/api/sessions').then(json<{ sessions: Array<{ id: string; title: string; createdAt: string; updatedAt: string }> }>),
+  getSession: (id: string) => fetch(`/api/sessions/${id}`).then(json<{
+    session: { id: string; title: string; createdAt: string; updatedAt: string };
+    messages: Array<{
+      id: string;
+      role: 'user' | 'assistant';
+      content: string;
+      citations: unknown[];
+      meta: { latencyMs?: number; termination?: string; toolCalls?: Array<{ name: string; kind: string }>; followUpQuestions?: string[] };
+      sortOrder: number;
+      createdAt: string;
+    }>;
+  }>),
+  createSession: (data: { question?: string; title?: string }) =>
+    fetch('/api/sessions', { method: 'POST', headers, body: JSON.stringify(data) }).then(r => r.ok ? r.json() : Promise.reject(new Error('创建会话失败'))),
+  addSessionMessage: (sessionId: string, data: {
+    role: 'user' | 'assistant';
+    content: string;
+    citations?: unknown[];
+    meta?: { latencyMs?: number; termination?: string; toolCalls?: Array<{ name: string; kind: string }>; followUpQuestions?: string[] };
+  }) =>
+    fetch(`/api/sessions/${sessionId}/messages`, { method: 'POST', headers, body: JSON.stringify(data) })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('保存消息失败'))),
+  updateSessionMessage: (sessionId: string, messageId: string, data: {
+    content?: string;
+    citations?: unknown[];
+    meta?: { latencyMs?: number; termination?: string; toolCalls?: Array<{ name: string; kind: string }>; followUpQuestions?: string[] };
+  }) =>
+    fetch(`/api/sessions/${sessionId}/messages/${messageId}`, { method: 'PATCH', headers, body: JSON.stringify(data) })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('更新消息失败'))),
+  deleteSession: (id: string) =>
+    fetch(`/api/sessions/${id}`, { method: 'DELETE' }).then(r => r.ok ? r.json() : Promise.reject(new Error('删除失败'))),
 };

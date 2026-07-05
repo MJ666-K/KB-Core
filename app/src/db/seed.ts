@@ -24,6 +24,7 @@ const SKILL_DISPLAY_NAMES: Record<string, string> = {
   multihop: '深度分析',
   compare: '对比分析',
   summary: '要点总结',
+  followups: '推荐追问',
 };
 
 async function parseSkillMdFile(skillDir: string): Promise<ParsedSkill | null> {
@@ -86,6 +87,34 @@ export async function seedSkills(): Promise<void> {
   }
 
   logger.info(`[Seed] inserted ${inserted} skills from files`);
+}
+
+/** 将文件系统中尚未入库的 Skill 补写入 DB（不覆盖已有配置） */
+export async function ensureMissingSkillsFromFiles(): Promise<number> {
+  const existing = await db.select({ name: skillDefinitions.name }).from(skillDefinitions);
+  const existingNames = new Set(existing.map(r => r.name));
+
+  const entries = await readdir(SKILLS_DIR, { withFileTypes: true });
+  let inserted = 0;
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name === 'node_modules') continue;
+    const skill = await parseSkillMdFile(join(SKILLS_DIR, entry.name));
+    if (!skill || existingNames.has(skill.name)) continue;
+
+    await db.insert(skillDefinitions).values({
+      name: skill.name,
+      displayName: skill.displayName,
+      description: skill.description,
+      tools: skill.tools,
+      parameters: skill.parameters,
+      instructions: skill.instructions,
+    }).onConflictDoNothing();
+    inserted++;
+    logger.info(`[Seed] inserted missing skill: ${skill.name}`);
+  }
+
+  return inserted;
 }
 
 export async function seedAgents(): Promise<void> {

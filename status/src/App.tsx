@@ -18,6 +18,7 @@ import Documents from './pages/Documents';
 import DocDetail from './pages/DocDetail';
 import Chat from './pages/Chat';
 import Settings from './pages/Settings';
+import { CHAT_SUBTITLE } from './chatHints';
 
 const { Sider, Header, Content } = Layout;
 const { Text } = Typography;
@@ -28,7 +29,7 @@ const menuItems = [
   { key: '/models', icon: <ApiOutlined />, label: '模型', title: '模型', subtitle: 'LLM 模型与推理参数管理' },
   { key: '/skills', icon: <ToolOutlined />, label: 'Skills', title: 'Skills', subtitle: 'Agent 高级任务单元' },
   { key: '/documents', icon: <FileTextOutlined />, label: '文档库', title: '文档库', subtitle: '上传 · 刷新 · 重新嵌入 · 删除' },
-  { key: '/chat', icon: <MessageOutlined />, label: '法律助手', title: '法律助手', subtitle: '流式对话 · 子智能体路由' },
+  { key: '/chat', icon: <MessageOutlined />, label: '法律助手', title: '法律助手', subtitle: CHAT_SUBTITLE },
   { key: '/settings', icon: <SettingOutlined />, label: '参数配置', title: '参数配置', subtitle: '检索流水线 · 文本切割' },
 ];
 
@@ -42,6 +43,7 @@ export default function App() {
     )?.key || '/';
 
   const isDocDetail = location.pathname.startsWith('/documents/') && location.pathname !== '/documents';
+  const isChatPage = location.pathname === '/chat' || location.pathname.startsWith('/chat/');
   const currentItem = menuItems.find(m => m.key === selectedKey);
 
   const headerDisplay = isDocDetail
@@ -128,8 +130,11 @@ export default function App() {
             <div style={{ fontSize: 12, color: '#00000073' }}>v0.1</div>
           </Space>
         </Header>
-        <Content style={{ padding: 24 }}>
-          <div style={{ minHeight: 280 }}>
+        <Content
+          className={isChatPage ? 'kc-page-content kc-page-content-chat' : 'kc-page-content'}
+          style={{ padding: isChatPage ? undefined : 24 }}
+        >
+          <div className={isChatPage ? 'kc-page-inner kc-page-inner-chat' : 'kc-page-inner'}>
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/agents" element={<Agents />} />
@@ -138,6 +143,7 @@ export default function App() {
               <Route path="/documents" element={<Documents />} />
               <Route path="/documents/:id" element={<DocDetail />} />
               <Route path="/chat" element={<Chat />} />
+              <Route path="/chat/:sessionId" element={<Chat />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>
           </div>

@@ -1,12 +1,18 @@
 import { useEffect, useState } from 'react';
-import { Table, Button, Space, Modal, Form, Input, Switch, message, Popconfirm, Card, Tag } from 'antd';
+import { Table, Button, Space, Modal, Form, Input, Switch, message, Popconfirm, Card, Tag, Select } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api } from '../api';
 import type { Skill } from '../types';
 import { defaultTablePagination } from '../tablePagination';
 
+interface ToolOption {
+  name: string;
+  description: string;
+}
+
 export default function Skills() {
   const [skills, setSkills] = useState<Skill[]>([]);
+  const [toolOptions, setToolOptions] = useState<ToolOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Skill | null>(null);
@@ -14,8 +20,11 @@ export default function Skills() {
 
   const load = () => {
     setLoading(true);
-    api.getSkills()
-      .then(r => setSkills(r.skills))
+    Promise.all([api.getSkills(), api.getSkillToolOptions()])
+      .then(([r, tools]) => {
+        setSkills(r.skills);
+        setToolOptions(tools.tools ?? []);
+      })
       .catch(() => message.error('加载失败'))
       .finally(() => setLoading(false));
   };
@@ -25,15 +34,13 @@ export default function Skills() {
   const onEdit = (s: Skill | null) => {
     setEditing(s);
     form.resetFields();
-    if (s) form.setFieldsValue({ ...s, tools: (s.tools || []).join(', ') });
+    if (s) form.setFieldsValue({ ...s, tools: s.tools ?? [] });
     setModalOpen(true);
   };
 
   const onSave = () => {
     form.validateFields().then(values => {
-      const tools = typeof values.tools === 'string'
-        ? values.tools.split(',').map((t: string) => t.trim()).filter(Boolean)
-        : values.tools || [];
+      const tools = Array.isArray(values.tools) ? values.tools : [];
       const payload = { ...values, tools };
       const req = editing ? api.updateSkill(editing.id, payload) : api.createSkill(payload);
       req
@@ -126,8 +133,24 @@ export default function Skills() {
           <Form.Item name="description" label="描述" style={{ marginTop: 12, marginBottom: 0 }}>
             <Input.TextArea rows={2} placeholder="LLM 用来决定是否调用此 Skill" />
           </Form.Item>
-          <Form.Item name="tools" label="工具白名单" style={{ marginTop: 12, marginBottom: 0 }}>
-            <Input placeholder="search_knowledge, get_document（留空=纯对话）" />
+          <Form.Item name="tools" label="可用工具" style={{ marginTop: 12, marginBottom: 0 }} extra="从下拉框选择 Skill 可调用的工具，留空表示纯 LLM 对话">
+            <Select
+              mode="multiple"
+              allowClear
+              placeholder="选择工具（可多选）"
+              optionFilterProp="label"
+              options={toolOptions.map(t => ({
+                value: t.name,
+                label: t.name,
+                title: t.description,
+              }))}
+              optionRender={(opt) => (
+                <div>
+                  <div><code>{opt.value}</code></div>
+                  <div style={{ fontSize: 12, color: '#888' }}>{toolOptions.find(x => x.name === opt.value)?.description}</div>
+                </div>
+              )}
+            />
           </Form.Item>
           <Form.Item name="instructions" label="指令 (Markdown)" style={{ marginTop: 12, marginBottom: 0 }}>
             <Input.TextArea rows={10} style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12 }} placeholder="# 执行步骤&#10;1. ...&#10;2. ..." />

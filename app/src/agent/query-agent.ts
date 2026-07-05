@@ -1,4 +1,4 @@
-import type { LLMService, Message, ChatResponse, ToolCall } from '../llm/llm-service';
+import type { LLMService, Message, ChatResponse, ToolCall, ChatOptions } from '../llm/llm-service';
 import type { SkillRegistry } from '../skills/registry';
 import type { ToolRegistry } from '../tools/registry';
 import type { HookRegistry } from '../hooks/registry';
@@ -15,7 +15,6 @@ import { db } from '../db/client';
 import { queryLogs, agentTraces } from '../db/schema';
 import { getQuerySettings } from '../settings/effective-config';
 import { logger } from '../utils/logger';
-import type { ChatOptions } from '../llm/llm-service';
 
 function deduplicateCitations(citations: Citation[]): Citation[] {
   const seen = new Set<string>();

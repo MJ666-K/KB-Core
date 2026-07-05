@@ -7,5 +7,7 @@ export { agentTraces } from './agent-trace';
 export { agents } from './agents';
 export { models } from './models';
 export { skillDefinitions } from './skill-definitions';
+export { chatSessions, chatMessages } from './chat-session';
 export type { Citation, ToolCallRecord } from './query-log';
+export type { ChatMessageMeta } from './chat-session';
 export type { AgentStep } from './agent-trace';

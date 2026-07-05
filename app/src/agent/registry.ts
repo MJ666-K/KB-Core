@@ -1,11 +1,11 @@
-import type { QueryAgent } from './query-agent';
+import type { MainAgent } from './main-agent';
 
-let agentInstance: QueryAgent | null = null;
+let agentInstance: MainAgent | null = null;
 
-export function setAgent(agent: QueryAgent): void {
+export function setAgent(agent: MainAgent): void {
   agentInstance = agent;
 }
 
-export function getAgent(): QueryAgent | null {
+export function getAgent(): MainAgent | null {
   return agentInstance;
 }

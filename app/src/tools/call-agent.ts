@@ -88,6 +88,7 @@ export const callAgentTool: Tool<CallAgentParams, SkillResult | { error: string 
         datasetIds,
         topK: params.top_k,
         maxIterations: params.max_iterations,
+        generateFollowUps: false,
       }, subAgentEvents);
       const elapsed = Date.now() - callStart;
 

@@ -54,7 +54,10 @@ export function formatCitations(results: RetrievalResult[]): Citation[] {
 }
 
 export function buildContext(results: RetrievalResult[]): string {
-  return results.map((c, i) => `[${i + 1}] ${c.text}`).join('\n\n');
+  return results.map((c, i) => {
+    const title = c.documentTitle || `检索片段 ${i + 1}`;
+    return `${title}\n${c.text}\n[${i + 1}]`;
+  }).join('\n\n---\n\n');
 }
 
 export function deduplicateChunks(chunks: RetrievalResult[]): RetrievalResult[] {
@@ -69,8 +72,7 @@ export const NO_RETRIEVAL_TOOL_CONTENT = [
   '请遵守：',
   '1. 不要将任何知识库文档内容注入回答；',
   '2. 可基于通用法律知识回答用户问题；',
-  '3. 回答开头必须包含准确性提示（纯文字，不要加粗）：',
-  '   以下回答未基于知识库检索，由 AI 基于通用法律知识生成，可能存在遗漏或偏差，不构成正式法律意见。具体事项请咨询专业律师。',
+  '3. 不要在回答中说明「未检索到」或重复免责声明（界面已有统一提示）；',
   '4. 不得编造具体法条编号或声称来自知识库。',
 ].join('\n');
 
@@ -99,8 +101,22 @@ export const OUTPUT_FORMAT_RULES = `
 
 ### 法条引用
 
-- 格式：根据《法律名称》第X条规定，"原文或复述"[1]
+- 行内引用：根据《法律名称》第X条规定，"原文或复述"[1]
+- 整段引用法条时，先写法律名称与条款编号，再写法条正文，**引用编号 [1] 放在该段正文末尾**，不要放在标题或段首
 - 同一句话末尾标注 [1][2]，不要每几个字就标一次
+
+**整段法条引用示例（正确）：**
+
+\`\`\`
+《中华人民共和国会计法》第七条
+
+下列事项，应当办理会计手续，进行会计核算：
+(一) 款项和有价证券的收付；
+(二) 财物的收发、增减和使用；
+[1]
+\`\`\`
+
+**禁止：** 将 [1] 写在条文标题之前，如 \`[1] 《会计法》第七条\`
 
 ### 列表示例
 
@@ -131,7 +147,7 @@ export const RETRIEVAL_FINAL_HINT =
 export const NO_RETRIEVAL_FINAL_HINT = [
   '知识库检索未获得可用法律条文。',
   '请直接基于通用法律知识回答，不要引用或编造具体法条原文。',
-  '回答开头必须包含准确性提示（单独一段）：以下回答未基于知识库检索，仅供参考，请咨询专业律师。',
+  '不要在回答中说明「未检索到」或重复免责声明（界面已有统一提示）。',
   '仍须遵守输出格式：分节、段间空行、列表每项一行。',
 ].join('\n');
 

@@ -10,6 +10,8 @@ export interface QueryOptions {
   history?: Message[];
   agentName?: string;
   model?: string;
+  /** 子 Agent 调用时为 false，避免重复生成推荐追问 */
+  generateFollowUps?: boolean;
 }
 
 export interface QueryResult {
@@ -20,6 +22,7 @@ export interface QueryResult {
   latencyMs: number;
   queryLogId: string;
   termination: 'skill' | 'synthesis' | 'direct';
+  followUpQuestions?: string[];
 }
 
 export interface SubAgentRef {
@@ -37,6 +40,7 @@ export type AgentEvent =
   | { type: 'answer_start' }
   | { type: 'answer_token'; token: string }
   | { type: 'answer_end' }
+  | { type: 'follow_up'; questions: string[] }
   | { type: 'result_end'; citations: Citation[]; latencyMs: number; termination: string; queryLogId: string };
 
 export interface EventStream {

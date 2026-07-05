@@ -1,5 +1,7 @@
 /** 不在 UI 展示的内部步骤（仍正常执行，仅隐藏标签与专属状态文案） */
-export const HIDDEN_UI_ACTIONS = new Set(['call_agent', 'qa', 'search_knowledge']);
+export const HIDDEN_UI_ACTIONS = new Set([
+  'call_agent', 'qa', 'search_knowledge', 'search',
+]);
 
 export function shouldShowAction(name: string): boolean {
   return !HIDDEN_UI_ACTIONS.has(name);
@@ -34,8 +36,10 @@ export function statusMessage(
   if (phase === 'thinking') return '正在理解您的问题...';
   if (phase === 'writing') return '正在生成回答...';
   if (phase === 'tool') {
+    if (runningAction === 'search_knowledge' || runningAction === 'search') {
+      return '正在检索相关法律资料...';
+    }
     if (runningAction && !shouldShowAction(runningAction)) return '正在处理...';
-    if (runningAction === 'search_knowledge') return '正在检索相关法律资料...';
     if (runningAction === 'call_agent') return '正在请专家分析...';
     if (kind === 'skill' || runningAction === 'chat' || runningAction === 'qa') return '正在整理回答...';
     return '正在处理...';

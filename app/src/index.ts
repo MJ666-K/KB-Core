@@ -21,7 +21,7 @@ import { createHookRegistry } from './hooks';
 import { QueryAgent } from './agent/query-agent';
 import { MainAgent } from './agent/main-agent';
 import { SubAgentRegistry, setSubAgentRegistry } from './agent/sub-agent-registry';
-import { seedSkills, seedAgents } from './db/seed';
+import { seedSkills, seedAgents, ensureMissingSkillsFromFiles } from './db/seed';
 import { startWorker } from './pipeline/queue';
 
 import { mountApiRoutes } from './routes/index';
@@ -35,6 +35,7 @@ async function runManualMigrations(): Promise<void> {
   const files = [
     '../src/db/migrations/manual_add_agents_and_skills.sql',
     '../src/db/migrations/manual_add_tsvector_and_fkeys.sql',
+    '../src/db/migrations/manual_add_chat_sessions.sql',
   ];
   const pgClient = (await import('pg')).default;
   const { config: cfg } = await import('./config');
@@ -74,6 +75,7 @@ async function main(): Promise<void> {
   await runManualMigrations();
   await initRuntimeSettings();
   await seedSkills();
+  await ensureMissingSkillsFromFiles();
   await seedAgents();
 
   const embeddingService = new EmbeddingService();
@@ -100,7 +102,7 @@ async function main(): Promise<void> {
   await subRegistry.reload();
 
   const mainAgent = new MainAgent(llm, skillRegistry, mainToolRegistry, hookRegistry);
-  setAgent(mainAgent as unknown as QueryAgent);
+  setAgent(mainAgent);
   startWorker();
 
   mountApiRoutes(app);

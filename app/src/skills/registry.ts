@@ -1,6 +1,7 @@
 import type { Skill, SkillMetadata } from './types';
 import type { FunctionDefinition } from '../llm/llm-service';
 import { SkillLoader } from './loader';
+import { isInternalSkill } from './follow-up';
 
 export class SkillRegistry {
   private readonly skills = new Map<string, Skill>();
@@ -16,17 +17,21 @@ export class SkillRegistry {
     const list = whitelist && whitelist.length > 0
       ? [...this.skills.values()].filter(s => whitelist.includes(s.metadata.name))
       : [...this.skills.values()];
-    return list.map(s => ({
-      type: 'function' as const,
-      function: { name: s.metadata.name, description: s.metadata.description, parameters: s.metadata.parameters },
-    }));
+    return list
+      .filter(s => !isInternalSkill(s.metadata.name))
+      .map(s => ({
+        type: 'function' as const,
+        function: { name: s.metadata.name, description: s.metadata.description, parameters: s.metadata.parameters },
+      }));
   }
 
   listMetadata(whitelist?: readonly string[]): SkillMetadata[] {
     const list = whitelist && whitelist.length > 0
       ? [...this.skills.values()].filter(s => whitelist.includes(s.metadata.name))
       : [...this.skills.values()];
-    return list.map(s => s.metadata);
+    return list
+      .filter(s => !isInternalSkill(s.metadata.name))
+      .map(s => s.metadata);
   }
 
   /** 重新从 DB 加载所有 skills（覆盖已有） */
