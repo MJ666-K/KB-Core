@@ -4,7 +4,7 @@ import { nanoid } from 'nanoid';
 import { extname } from 'path';
 import { db } from '../db/client';
 import { documents, datasets } from '../db/schema';
-import { ingestQueue } from '../pipeline/queue';
+import { enqueueIngest } from '../pipeline/document-reset';
 import { fileHash } from '../utils/hash';
 import { eq } from 'drizzle-orm';
 import { logger } from '../utils/logger';
@@ -52,7 +52,7 @@ app.post('/ingest', async (c) => {
     sourcePath: filePath, fileHash: fhash, fileSize: file.size, status: 'pending',
   }).returning();
 
-  await ingestQueue.add('ingest', { docId: doc!.id, sourcePath: filePath, datasetId: dataset.id });
+  await enqueueIngest(doc!.id, filePath, dataset.id);
   logger.info(`[Ingest] Queued document: ${doc!.id} (${file.name})`);
   return c.json({ docId: doc!.id, status: 'pending' });
 });

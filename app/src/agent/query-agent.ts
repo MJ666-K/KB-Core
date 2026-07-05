@@ -13,7 +13,7 @@ import type { QueryOptions, QueryResult, EventStream } from './types';
 import type { ModelConfig } from './sub-agent-registry';
 import { db } from '../db/client';
 import { queryLogs, agentTraces } from '../db/schema';
-import { config } from '../config';
+import { getQuerySettings } from '../settings/effective-config';
 import { logger } from '../utils/logger';
 import type { ChatOptions } from '../llm/llm-service';
 
@@ -85,7 +85,7 @@ export class QueryAgent {
       ...this.toolRegistry.toFunctionDefinitions(),
     ];
 
-    const maxIterations = options.maxIterations ?? config.agentMaxIterations;
+    const maxIterations = options.maxIterations ?? getQuerySettings().agentMaxIterations;
     let skillDone = false;
 
     for (let iter = 0; iter < maxIterations && !skillDone; iter++) {

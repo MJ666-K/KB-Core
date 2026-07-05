@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { serveStatic } from 'hono/bun';
 import { readFile } from 'fs/promises';
 import { config } from './config';
+import { initRuntimeSettings } from './settings/store';
 import { db } from './db/client';
 import { datasets } from './db/schema';
 import { eq } from 'drizzle-orm';
@@ -63,6 +64,7 @@ async function main(): Promise<void> {
   }
 
   await runManualMigrations();
+  await initRuntimeSettings();
   await seedSkills();
   await seedAgents();
 

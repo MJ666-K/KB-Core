@@ -51,11 +51,6 @@ body {
 .chunk-hl {
   border-radius: 2px;
   cursor: pointer;
-  transition: background 0.15s;
-}
-
-.chunk-hl:hover, .chunk-hl.hovered {
-  background: rgba(22, 119, 255, 0.1);
 }
 
 .chunk-hl.selected {
@@ -109,4 +104,57 @@ body {
 
 .kc-stat-card:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.kc-settings {
+  padding-bottom: 24px;
+}
+
+.kc-settings-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.kc-settings-section {
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  padding: 16px 18px;
+  height: 100%;
+}
+
+.kc-settings-section-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.kc-settings-section-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.kc-settings-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.kc-settings-body {
+  transition: opacity 0.15s;
 }

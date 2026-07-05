@@ -1,5 +1,5 @@
 import type { Hook } from './types';
-import { config } from '../config';
+import { getQuerySettings } from '../settings/effective-config';
 
 const callCounts = new Map<string, { count: number; resetAt: number }>();
 const WINDOW_MS = 60_000;
@@ -12,7 +12,10 @@ export const rateLimitHook: Hook = {
     let entry = callCounts.get(key);
     if (!entry || now > entry.resetAt) { entry = { count: 0, resetAt: now + WINDOW_MS }; callCounts.set(key, entry); }
     entry.count++;
-    if (entry.count > config.agentMaxToolCalls) return { block: true, reason: `超过单次查询最大调用数 (${config.agentMaxToolCalls})` };
+    if (entry.count > getQuerySettings().agentMaxToolCalls) {
+      const max = getQuerySettings().agentMaxToolCalls;
+      return { block: true, reason: `超过单次查询最大调用数 (${max})` };
+    }
   },
 };
 

@@ -1,5 +1,6 @@
 import type { SplitConfig, ChunkUnit } from './types';
 import { RecursiveSplitter } from './recursive-splitter';
+import { computeChunkOffsets } from './offsets';
 import { countTokens } from './token-counter';
 import { sha256 } from '../utils/hash';
 
@@ -13,23 +14,13 @@ export class ParentChildSplitter {
     const cleaned = text.replace(/\r\n/g, '\n');
     const units: ChunkUnit[] = [];
 
-    // 切 Parent
     const parentSplitter = new RecursiveSplitter(this.parentConfig);
     const parentTexts = parentSplitter.splitRaw(cleaned);
-
-    let searchFrom = 0;
-    const parentStartOffsets: number[] = [];
-    for (const parentText of parentTexts) {
-      const fingerprint = parentText.slice(0, 50);
-      const foundAt = cleaned.indexOf(fingerprint, searchFrom);
-      const startOffset = foundAt >= 0 ? foundAt : searchFrom;
-      parentStartOffsets.push(startOffset);
-      searchFrom = startOffset + parentText.length;
-    }
+    const parentOffsets = computeChunkOffsets(cleaned, parentTexts);
 
     for (let pi = 0; pi < parentTexts.length; pi++) {
       const parentText = parentTexts[pi]!;
-      const startOffset = parentStartOffsets[pi]!;
+      const { start: startOffset, end: endOffset } = parentOffsets[pi]!;
 
       units.push({
         text: parentText,
@@ -38,19 +29,19 @@ export class ParentChildSplitter {
         parentChunkIndex: pi,
         childIndexWithinParent: null,
         startOffset,
-        endOffset: startOffset + parentText.length,
+        endOffset,
         contentHash: sha256(parentText),
         metadata: { ...metadata, isParent: true, parentChunkIndex: pi },
       });
 
-      // 切 Child
       const childSplitter = new RecursiveSplitter(this.childConfig);
       const childTexts = childSplitter.splitRaw(parentText);
+      const childOffsets = computeChunkOffsets(parentText, childTexts);
+
       for (let ci = 0; ci < childTexts.length; ci++) {
         const childText = childTexts[ci]!;
-        const fingerprint = childText.slice(0, 30);
-        const localStart = parentText.indexOf(fingerprint);
-        const absoluteStart = startOffset + (localStart >= 0 ? localStart : 0);
+        const local = childOffsets[ci]!;
+        const absoluteStart = startOffset + local.start;
 
         units.push({
           text: childText,

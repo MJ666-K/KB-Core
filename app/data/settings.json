@@ -1,0 +1,16 @@
+{
+  "chunk": {
+    "parentTokens": 600,
+    "childTokens": 200,
+    "overlapTokens": 30
+  },
+  "query": {
+    "searchTopK": 10,
+    "denseTopKMultiplier": 3,
+    "rrfK": 60,
+    "rerankTopK": 20,
+    "agentMaxIterations": 5,
+    "agentMaxToolCalls": 30,
+    "resultCacheTtlMs": 60000
+  }
+}

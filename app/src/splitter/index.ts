@@ -1,10 +1,11 @@
 import { ParentChildSplitter } from './parent-child-splitter';
 import { SEPARATOR_LEVELS } from './separators';
 import { countTokens } from './token-counter';
-import { config } from '../config';
+import { getChunkSettings } from '../settings/effective-config';
 
 export function createSplitter(): ParentChildSplitter {
-  return createSplitterWithConfig(config.chunkParentTokens, config.chunkChildTokens, config.chunkOverlapTokens);
+  const { parentTokens, childTokens, overlapTokens } = getChunkSettings();
+  return createSplitterWithConfig(parentTokens, childTokens, overlapTokens);
 }
 
 export function createSplitterWithConfig(

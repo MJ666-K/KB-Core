@@ -3,7 +3,7 @@ import { db } from '../db/client';
 import { documents, chunks, datasets as datasetsSchema } from '../db/schema';
 import { eq, and, isNull, desc, sql, inArray } from 'drizzle-orm';
 import { readFile } from 'fs/promises';
-import { ingestQueue } from '../pipeline/queue';
+import { resetDocumentForReingest, enqueueIngest } from '../pipeline/document-reset';
 import { logger } from '../utils/logger';
 
 const app = new Hono();
@@ -109,12 +109,11 @@ app.delete('/:id', async (c) => {
 app.post('/:id/reingest', async (c) => {
   const id = c.req.param('id');
   const [doc] = await db.select({ sourcePath: documents.sourcePath, datasetId: documents.datasetId })
-    .from(documents).where(eq(documents.id, id));
+    .from(documents).where(and(eq(documents.id, id), isNull(documents.deletedAt)));
   if (!doc) return c.json({ error: 'Document not found' }, 404);
 
-  await db.delete(chunks).where(eq(chunks.documentId, id));
-  await db.update(documents).set({ status: 'pending', updatedAt: new Date() }).where(eq(documents.id, id));
-  await ingestQueue.add('ingest', { docId: id, sourcePath: doc.sourcePath, datasetId: doc.datasetId });
+  await resetDocumentForReingest(id);
+  await enqueueIngest(id, doc.sourcePath, doc.datasetId);
   logger.info(`[Reingest] Queued document: ${id}`);
   return c.json({ ok: true, status: 'pending' });
 });

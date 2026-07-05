@@ -17,12 +17,18 @@ export class EmbeddingService {
     return vec;
   }
 
-  async embedBatch(texts: string[]): Promise<number[][]> {
+  async embedBatch(
+    texts: string[],
+    opts?: { onBatch?: (batchIndex: number, totalBatches: number, batchSize: number) => void },
+  ): Promise<number[][]> {
     if (texts.length === 0) return [];
     const results: number[][] = [];
     const batchSize = config.embeddingBatchSize;
+    const totalBatches = Math.ceil(texts.length / batchSize);
     for (let i = 0; i < texts.length; i += batchSize) {
       const batch = texts.slice(i, i + batchSize);
+      const batchIndex = Math.floor(i / batchSize) + 1;
+      opts?.onBatch?.(batchIndex, totalBatches, batch.length);
       const vectors = await this.callApi(batch);
       results.push(...vectors);
     }

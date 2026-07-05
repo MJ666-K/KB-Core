@@ -6,6 +6,7 @@ import datasetsRouter from './datasets';
 import statsRouter from './stats';
 import modelsRouter from './models';
 import chatRouter from './chat';
+import settingsRouter from './settings';
 import { getSubAgentRegistry } from '../agent/sub-agent-registry';
 
 export function mountApiRoutes(app: Hono): void {
@@ -16,6 +17,7 @@ export function mountApiRoutes(app: Hono): void {
   app.route('/api/stats', statsRouter);
   app.route('/api/models', modelsRouter);
   app.route('/api/chat', chatRouter);
+  app.route('/api/settings', settingsRouter);
   app.post('/api/reload', async (c) => {
     try {
       await getSubAgentRegistry().reload();

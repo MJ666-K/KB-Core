@@ -3,6 +3,7 @@ import { Table, Button, Space, Modal, Form, Input, Switch, message, Popconfirm, 
 import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api } from '../api';
 import type { Skill } from '../types';
+import { defaultTablePagination } from '../tablePagination';
 
 export default function Skills() {
   const [skills, setSkills] = useState<Skill[]>([]);
@@ -105,14 +106,14 @@ export default function Skills() {
           loading={loading}
           rowKey="id"
           size="middle"
-          pagination={{ pageSize: 10, showSizeChanger: true, showTotal: t => `共 ${t} 条` }}
+          pagination={defaultTablePagination}
           expandable={{
             expandedRowRender,
             rowExpandable: record => !!record.instructions,
           }}
         />
       </Card>
-      <Modal title={editing ? `编辑: ${editing.displayName}` : '新建 Skill'} open={modalOpen} onCancel={() => setModalOpen(false)} onOk={onSave} width={760} okText="保存" cancelText="取消" styles={{ body: { maxHeight: '75vh', overflowY: 'auto', padding: '12px 20px' } }}>
+      <Modal title={editing ? `编辑: ${editing.displayName}` : '新建 Skill'} open={modalOpen} onCancel={() => setModalOpen(false)} onOk={onSave} width={900} okText="保存" cancelText="取消" styles={{ body: { maxHeight: '75vh', overflowY: 'auto', padding: '12px 20px' } }}>
         <Form form={form} layout="vertical" style={{ marginTop: 8 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <Form.Item name="name" label="标识" rules={[{ required: true, message: '请输入标识' }]} style={{ margin: 0 }}>

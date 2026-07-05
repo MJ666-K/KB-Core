@@ -3,6 +3,7 @@ import { Table, Button, Space, Modal, Form, Input, InputNumber, Switch, message,
 import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api } from '../api';
 import type { Model } from '../types';
+import { defaultTablePagination } from '../tablePagination';
 
 export default function Models() {
   const [models, setModels] = useState<Model[]>([]);
@@ -70,9 +71,9 @@ export default function Models() {
           <Button type="primary" icon={<PlusOutlined />} onClick={() => onEdit(null)}>新增模型</Button>
           <Button icon={<ReloadOutlined />} onClick={load}>刷新</Button>
         </div>
-        <Table dataSource={models} columns={cols} loading={loading} rowKey="id" size="middle" pagination={{ pageSize: 10, showSizeChanger: true, showTotal: t => `共 ${t} 条` }} />
+        <Table dataSource={models} columns={cols} loading={loading} rowKey="id" size="middle" pagination={defaultTablePagination} />
       </Card>
-      <Modal title={editing ? `编辑: ${editing.displayName}` : '新增模型'} open={modalOpen} onCancel={() => setModalOpen(false)} onOk={onSave} width={600} okText="保存" cancelText="取消" styles={{ body: { padding: '12px 20px' } }}>
+      <Modal title={editing ? `编辑: ${editing.displayName}` : '新增模型'} open={modalOpen} onCancel={() => setModalOpen(false)} onOk={onSave} width={780} okText="保存" cancelText="取消" styles={{ body: { padding: '12px 20px' } }}>
         <Form form={form} layout="vertical" style={{ marginTop: 8 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <Form.Item name="name" label="标识" rules={[{ required: true, message: '请输入标识' }]} style={{ margin: 0 }}>

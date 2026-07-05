@@ -34,6 +34,15 @@ describe('ParentChildSplitter', () => {
     }
   });
 
+  it('每个 child 的 offset 对应原文片段', () => {
+    const s = new ParentChildSplitter(parentConfig, childConfig);
+    const text = '段落一。这是第一段的内容。内容比较多。\n\n段落二。这是第二段。内容也很丰富。\n\n段落三。第三段内容。';
+    const units = s.split(text);
+    for (const u of units) {
+      expect(text.slice(u.startOffset, u.endOffset)).toBe(u.text);
+    }
+  });
+
   it('所有 unit 有 contentHash', () => {
     const s = new ParentChildSplitter(parentConfig, childConfig);
     const units = s.split('测试文本。另一个句子。');

@@ -7,6 +7,7 @@ import { rrfFusion } from './rrf';
 import { ApiReranker, PassThroughReranker, type RerankCandidate, type Reranker } from './reranker';
 import { EmbeddingService } from '../embedding/embedding-service';
 import { config } from '../config';
+import { getQuerySettings } from '../settings/effective-config';
 import { TTLCache } from '../cache/ttl-cache';
 
 export interface RetrievalResult {
@@ -69,7 +70,8 @@ export class HybridRetriever {
   }
 
   async retrieve(query: string, opts: RetrieveOptions): Promise<RetrievalResult[]> {
-    const topK = opts.topK ?? config.searchTopK;
+    const q = getQuerySettings();
+    const topK = opts.topK ?? q.searchTopK;
     const idsStr = (opts.datasetIds ?? [opts.datasetId]).join(',');
     const cacheKey = `${idsStr}:${query}:${topK}`;
     const cached = this.resultCache.get(cacheKey);
@@ -78,11 +80,12 @@ export class HybridRetriever {
   }
 
   async retrieveWithDetails(query: string, opts: RetrieveOptions): Promise<RetrieveWithDetailsResult> {
-    const topK = opts.topK ?? config.searchTopK;
+    const q = getQuerySettings();
+    const topK = opts.topK ?? q.searchTopK;
     const idsStr = (opts.datasetIds ?? [opts.datasetId]).join(',');
 
     const queryVec = await this.embeddingService.embedQuery(query);
-    const extend = topK * config.denseTopKMultiplier;
+    const extend = topK * q.denseTopKMultiplier;
 
     const [denseHits, sparseHits] = await Promise.all([
       denseSearch(queryVec, opts.datasetId, extend, opts.datasetIds),
@@ -95,7 +98,7 @@ export class HybridRetriever {
     const fused = rrfFusion(
       denseHits.map(h => [h.chunkId, h.score] as const),
       sparseHits.map(h => [h.chunkId, h.score] as const),
-      config.rrfK,
+      q.rrfK,
     );
     const rrfMap = new Map(fused.map(f => [f[0], f[1]]));
 
@@ -106,7 +109,7 @@ export class HybridRetriever {
       return { results: empty, details: { query, topK, denseCount: 0, sparseCount: 0, rrfCount: 0, rerankCount: 0, rerankFallback: false, candidates: [] } };
     }
 
-    const candidateIds = fused.slice(0, config.rerankTopK).map(f => f[0]);
+    const candidateIds = fused.slice(0, q.rerankTopK).map(f => f[0]);
     const candidates = await this.loadCandidates(candidateIds, denseHits);
     const { results: reranked, fallback: rerankFallback } = await this.reranker.rank(query, candidates, topK);
     const rerankScoreMap = new Map(reranked.map((r, i) => [r.chunkId, { score: r.score, rank: i }]));

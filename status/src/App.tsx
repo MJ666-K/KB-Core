@@ -8,6 +8,7 @@ import {
   FileTextOutlined,
   MessageOutlined,
   BookOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import Dashboard from './pages/Dashboard';
 import Agents from './pages/Agents';
@@ -16,6 +17,7 @@ import Skills from './pages/Skills';
 import Documents from './pages/Documents';
 import DocDetail from './pages/DocDetail';
 import Chat from './pages/Chat';
+import Settings from './pages/Settings';
 
 const { Sider, Header, Content } = Layout;
 const { Text } = Typography;
@@ -27,6 +29,7 @@ const menuItems = [
   { key: '/skills', icon: <ToolOutlined />, label: 'Skills', title: 'Skills', subtitle: 'Agent 高级任务单元' },
   { key: '/documents', icon: <FileTextOutlined />, label: '文档', title: '文档', subtitle: '上传 · 刷新 · 重新嵌入 · 删除' },
   { key: '/chat', icon: <MessageOutlined />, label: '智能问答', title: '智能问答', subtitle: '流式对话 · 子智能体路由' },
+  { key: '/settings', icon: <SettingOutlined />, label: '参数配置', title: '参数配置', subtitle: '切割参数 · 问答检索参数' },
 ];
 
 export default function App() {
@@ -125,7 +128,7 @@ export default function App() {
             <div style={{ fontSize: 12, color: '#00000073' }}>v0.1</div>
           </Space>
         </Header>
-        <Content style={{ padding: '24px 24px 0' }}>
+        <Content style={{ padding: 24 }}>
           <div style={{ minHeight: 280 }}>
             <Routes>
               <Route path="/" element={<Dashboard />} />
@@ -135,6 +138,7 @@ export default function App() {
               <Route path="/documents" element={<Documents />} />
               <Route path="/documents/:id" element={<DocDetail />} />
               <Route path="/chat" element={<Chat />} />
+              <Route path="/settings" element={<Settings />} />
             </Routes>
           </div>
         </Content>

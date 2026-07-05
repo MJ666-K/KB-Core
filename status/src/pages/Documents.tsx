@@ -10,6 +10,8 @@ import {
 } from '@ant-design/icons';
 import { api } from '../api';
 import type { Dataset } from '../types';
+import { datasetDisplayName } from '../datasetLabels';
+import { documentsTablePagination } from '../tablePagination';
 
 interface Document {
   id: string;
@@ -29,11 +31,6 @@ const statusConfig: Record<Document['status'], { color: string; label: string }>
   chunking: { color: 'processing', label: '分块中' },
   embedding: { color: 'processing', label: '嵌入中' },
   disabled: { color: 'default', label: '禁用' },
-};
-
-const datasetLabels: Record<string, string> = {
-  legal: '法律',
-  default: '默认',
 };
 
 export default function Documents() {
@@ -69,14 +66,20 @@ export default function Documents() {
   };
 
   const onBatchReingest = async () => {
-    try {
-      await Promise.all(selectedKeys.map(id =>
-        fetch(`/ingest/${id}`, { method: 'POST' }).then(r => { if (!r.ok) throw new Error('fail'); return r; })
-      ));
-      message.success(`已重新嵌入 ${selectedKeys.length} 个文档`);
-      setSelectedKeys([]);
-      load();
-    } catch { message.error('部分失败'); load(); }
+    let success = 0;
+    let fail = 0;
+    for (const id of selectedKeys) {
+      try {
+        await api.reingestDocument(id);
+        success++;
+      } catch {
+        fail++;
+      }
+    }
+    if (success > 0) message.success(`已重新嵌入 ${success} 个文档${fail > 0 ? `，${fail} 个失败` : ''}`);
+    else message.error('重新嵌入失败');
+    if (fail === 0) setSelectedKeys([]);
+    load();
   };
 
   const doUpload = async () => {
@@ -109,7 +112,7 @@ export default function Documents() {
     },
     {
       title: '数据集', dataIndex: 'datasetName', key: 'datasetName',
-      render: (v: string) => <Tag>{datasetLabels[v] ?? v}</Tag>,
+      render: (v: string) => <Tag>{datasetDisplayName(v)}</Tag>,
     },
     {
       title: '状态', dataIndex: 'status', key: 'status',
@@ -176,7 +179,7 @@ export default function Documents() {
           loading={loading}
           rowKey="id"
           size="middle"
-          pagination={{ pageSize: 10, showSizeChanger: true, showTotal: t => `共 ${t} 条`, showQuickJumper: true }}
+          pagination={documentsTablePagination}
           rowSelection={{ selectedRowKeys: selectedKeys, onChange: keys => setSelectedKeys(keys as string[]) }}
         />
       </Card>
@@ -189,7 +192,7 @@ export default function Documents() {
         okText={uploading ? '上传中...' : '开始上传'}
         cancelText="取消"
         okButtonProps={{ loading: uploading, disabled: fileList.length === 0 }}
-        width={500}
+        width={640}
         styles={{ body: { padding: '16px 20px' } }}
       >
         <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center' }}>
@@ -199,7 +202,7 @@ export default function Documents() {
             value={uploadDataset}
             onChange={v => setUploadDataset(v)}
             style={{ flex: 1 }}
-            options={datasets.map(d => ({ value: d.id, label: datasetLabels[d.name] ?? d.name }))}
+            options={datasets.map(d => ({ value: d.id, label: datasetDisplayName(d.name) }))}
           />
         </div>
         <Upload

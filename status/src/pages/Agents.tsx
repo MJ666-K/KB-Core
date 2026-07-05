@@ -3,6 +3,8 @@ import { Table, Button, Space, Modal, Form, Input, Select, Switch, message, Popc
 import { PlusOutlined, SearchOutlined, EditOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api } from '../api';
 import type { Agent, Dataset } from '../types';
+import { datasetDisplayName } from '../datasetLabels';
+import { defaultTablePagination } from '../tablePagination';
 
 export default function Agents() {
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -61,7 +63,20 @@ export default function Agents() {
     { title: '显示名', dataIndex: 'displayName', key: 'displayName', render: (v: string) => <strong>{v}</strong> },
     { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true },
     { title: '模型', dataIndex: 'model', key: 'model', render: (v: any) => v?.displayName ? <Tag color="blue">{v.displayName}</Tag> : <Tag color="default">未配置</Tag> },
-    { title: '数据集', dataIndex: 'datasetIds', key: 'datasetIds', render: (v: string[]) => v && v.length > 0 ? <Tag>{v.length} 个</Tag> : <span style={{ color: '#00000045' }}>—</span> },
+    {
+      title: '数据集', dataIndex: 'datasetIds', key: 'datasetIds',
+      render: (ids: string[]) => {
+        if (!ids?.length) return <span style={{ color: '#00000045' }}>—</span>;
+        return (
+          <Space size={[4, 4]} wrap>
+            {ids.map(id => {
+              const ds = datasets.find(d => d.id === id);
+              return <Tag key={id}>{datasetDisplayName(ds?.name ?? id)}</Tag>;
+            })}
+          </Space>
+        );
+      },
+    },
     { title: '启用', dataIndex: 'enabled', key: 'enabled', render: (v: boolean) => v ? <Tag color="success">启用</Tag> : <Tag>禁用</Tag> },
     {
       title: '操作', key: 'action', width: 160,
@@ -84,9 +99,9 @@ export default function Agents() {
           <Button icon={<ReloadOutlined />} onClick={load}>刷新</Button>
           <Input placeholder="搜索标识 / 显示名..." prefix={<SearchOutlined />} value={search} onChange={e => setSearch(e.target.value)} allowClear style={{ width: 240, marginLeft: 'auto' }} />
         </div>
-        <Table dataSource={filtered} columns={cols} loading={loading} rowKey="id" size="middle" pagination={{ pageSize: 10, showSizeChanger: true, showTotal: t => `共 ${t} 条` }} />
+        <Table dataSource={filtered} columns={cols} loading={loading} rowKey="id" size="middle" pagination={defaultTablePagination} />
       </Card>
-      <Modal title={editing ? `编辑: ${editing.displayName}` : '新建 Agent'} open={modalOpen} onCancel={() => setModalOpen(false)} onOk={onSave} width={600} okText="保存" cancelText="取消" styles={{ body: { padding: '12px 20px' } }}>
+      <Modal title={editing ? `编辑: ${editing.displayName}` : '新建 Agent'} open={modalOpen} onCancel={() => setModalOpen(false)} onOk={onSave} width={780} okText="保存" cancelText="取消" styles={{ body: { padding: '12px 20px' } }}>
         <Form form={form} layout="vertical" style={{ marginTop: 8 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <Form.Item name="name" label="标识" rules={[{ required: true, message: '请输入标识' }]} style={{ margin: 0 }}>
@@ -101,7 +116,7 @@ export default function Agents() {
           </Form.Item>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12 }}>
             <Form.Item name="datasetIds" label="数据集" style={{ margin: 0 }}>
-              <Select mode="multiple" placeholder="可多选" allowClear showSearch optionFilterProp="label" options={datasets.map(d => ({ value: d.id, label: d.name }))} />
+              <Select mode="multiple" placeholder="可多选" allowClear showSearch optionFilterProp="label" options={datasets.map(d => ({ value: d.id, label: datasetDisplayName(d.name) }))} />
             </Form.Item>
             <Form.Item name="modelId" label="模型" rules={[{ required: true, message: '请选择模型' }]} style={{ margin: 0 }}>
               <Select placeholder="选择模型" showSearch optionFilterProp="label" options={models.map(m => ({ value: m.id, label: `${m.displayName} (${m.modelId})` }))} />

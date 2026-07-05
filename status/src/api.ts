@@ -43,10 +43,16 @@ export const api = {
   getDocumentContent: (id: string) => fetch(`/api/documents/${id}/content`).then(r => r.text()),
   deleteDocument: (id: string) =>
     fetch(`/api/documents/${id}`, { method: 'DELETE' }).then(r => r.ok ? r.json() : Promise.reject(new Error('删除失败'))),
+  reingestDocument: (id: string) =>
+    fetch(`/api/documents/${id}/reingest`, { method: 'POST' }).then(r => r.ok ? r.json() : Promise.reject(new Error('重新嵌入失败'))),
   uploadDocument: (file: File, datasetId?: string) => {
     const fd = new FormData();
     fd.append('file', file);
     if (datasetId) fd.append('datasetId', datasetId);
     return fetch('/ingest', { method: 'POST', body: fd }).then(r => r.ok ? r.json() : Promise.reject(new Error('上传失败')));
   },
+
+  getSettings: () => fetch('/api/settings').then(json<{ settings: Record<string, unknown>; defaults: Record<string, unknown> }>),
+  updateSettings: (data: Record<string, unknown>) =>
+    fetch('/api/settings', { method: 'PUT', headers, body: JSON.stringify(data) }).then(r => r.ok ? r.json() : Promise.reject(new Error('保存失败'))),
 };

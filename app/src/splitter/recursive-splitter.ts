@@ -1,4 +1,5 @@
 import type { SplitConfig } from './types';
+import { PERIOD } from './separators';
 
 export class RecursiveSplitter {
   constructor(protected config: SplitConfig) {}
@@ -30,17 +31,23 @@ export class RecursiveSplitter {
     return parts.filter(p => p.length > 0);
   }
 
-  private recursiveSplit(text: string, level: number): string[] {
-    const { maxChunkSize, separators, lengthFunction: len } = this.config;
+  private splitByPeriod(text: string): string[] {
+    return this.splitBySeparators(text, [PERIOD]);
+  }
+
+  private recursiveSplit(text: string): string[] {
+    const { maxChunkSize, lengthFunction: len } = this.config;
     if (len(text) <= maxChunkSize) return [text];
-    if (level >= separators.length) return this.hardSplit(text);
-    const parts = this.splitBySeparators(text, separators[level]!);
+
+    const parts = this.splitByPeriod(text);
+    if (parts.length <= 1) return [text];
+
     const result: string[] = [];
     for (const part of parts) {
       if (len(part) <= maxChunkSize) {
         result.push(part);
       } else {
-        result.push(...this.recursiveSplit(part, level + 1));
+        result.push(part);
       }
     }
     return result;
@@ -54,22 +61,58 @@ export class RecursiveSplitter {
       const candidate = current + unit;
       if (len(candidate) <= maxChunkSize) {
         current = candidate;
+      } else if (current && len(current) >= minChunkSize) {
+        chunks.push(current);
+        current = unit;
+      } else if (current) {
+        chunks.push(...this.splitAtPeriodBoundary(current + unit));
+        current = '';
       } else {
-        if (current && len(current) >= minChunkSize) {
-          chunks.push(current);
-          current = unit;
-        } else {
-          chunks.push(current + unit);
-          current = '';
-        }
+        chunks.push(unit);
       }
     }
     if (current) chunks.push(current);
     return chunks;
   }
 
+  private splitAtPeriodBoundary(text: string): string[] {
+    const { maxChunkSize, lengthFunction: len } = this.config;
+    if (len(text) <= maxChunkSize) return [text];
+
+    const parts: string[] = [];
+    let remaining = text;
+    while (len(remaining) > maxChunkSize) {
+      const cut = this.findPeriodCut(remaining, maxChunkSize);
+      if (cut >= remaining.length) {
+        parts.push(remaining);
+        return parts;
+      }
+      parts.push(remaining.slice(0, cut));
+      remaining = remaining.slice(cut);
+    }
+    if (remaining) parts.push(remaining);
+    return parts;
+  }
+
+  private findPeriodCut(text: string, maxSize: number): number {
+    const { lengthFunction: len } = this.config;
+    if (len(text) <= maxSize) return text.length;
+
+    const ratio = maxSize / len(text);
+    const target = Math.max(1, Math.floor(text.length * ratio));
+    const window = Math.max(20, Math.floor(text.length * 0.2));
+
+    const idx = text.lastIndexOf(PERIOD, target);
+    if (idx >= target - window && idx >= 0) return idx + PERIOD.length;
+
+    const forward = text.indexOf(PERIOD, target);
+    if (forward >= 0 && forward <= target + window) return forward + PERIOD.length;
+
+    return text.length;
+  }
+
   private addOverlap(chunks: string[]): string[] {
-    const { overlapSize, lengthFunction: len, separators } = this.config;
+    const { overlapSize, lengthFunction: len } = this.config;
     if (overlapSize <= 0 || chunks.length <= 1) return chunks;
 
     const result = [chunks[0]!];
@@ -81,36 +124,24 @@ export class RecursiveSplitter {
       }
       const ratio = overlapSize / len(prev);
       let startChar = Math.floor(prev.length * (1 - ratio));
-      const snapTolerance = Math.max(2, Math.floor(overlapSize * 0.1));
-      const sentenceSeps = separators[1] ?? [];
-      for (const sep of sentenceSeps) {
-        const idx = prev.indexOf(sep, startChar);
-        if (idx >= 0 && Math.abs(idx - startChar) <= snapTolerance) {
-          startChar = idx + sep.length;
-          break;
+      const snapTolerance = Math.max(8, Math.floor(prev.length * 0.05));
+      let bestSnap = startChar;
+      const idx = prev.lastIndexOf(PERIOD, startChar + snapTolerance);
+      if (idx >= startChar - snapTolerance && idx >= 0) {
+        const snapEnd = idx + PERIOD.length;
+        if (Math.abs(snapEnd - startChar) < Math.abs(bestSnap - startChar)) {
+          bestSnap = snapEnd;
         }
       }
+      startChar = bestSnap;
       result.push(prev.slice(startChar) + chunks[i]);
     }
     return result;
   }
 
-  private hardSplit(text: string): string[] {
-    const { maxChunkSize, lengthFunction: len } = this.config;
-    const totalLen = len(text);
-    if (totalLen <= maxChunkSize) return [text];
-    const ratio = maxChunkSize / Math.max(totalLen, 1);
-    const step = Math.max(1, Math.floor(text.length * ratio));
-    const parts: string[] = [];
-    for (let i = 0; i < text.length; i += step) {
-      parts.push(text.slice(i, i + step));
-    }
-    return parts;
-  }
-
   splitRaw(text: string): string[] {
     const cleaned = text.replace(/\r\n/g, '\n');
-    const units = this.recursiveSplit(cleaned, 0);
+    const units = this.recursiveSplit(cleaned);
     const merged = this.mergeUnits(units);
     return this.addOverlap(merged);
   }
