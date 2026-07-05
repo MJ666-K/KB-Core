@@ -3,6 +3,7 @@ import { RecursiveSplitter } from './recursive-splitter';
 import { computeChunkOffsets } from './offsets';
 import { countTokens } from './token-counter';
 import { sha256 } from '../utils/hash';
+import { normalizeDocumentContent } from '../utils/text-normalize';
 
 export class ParentChildSplitter {
   constructor(
@@ -11,7 +12,7 @@ export class ParentChildSplitter {
   ) {}
 
   split(text: string, metadata: Record<string, unknown> = {}): ChunkUnit[] {
-    const cleaned = text.replace(/\r\n/g, '\n');
+    const cleaned = normalizeDocumentContent(text);
     const units: ChunkUnit[] = [];
 
     const parentSplitter = new RecursiveSplitter(this.parentConfig);

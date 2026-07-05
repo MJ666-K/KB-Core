@@ -2,6 +2,7 @@ import { describe, it, expect } from 'bun:test';
 import { ParentChildSplitter } from '../src/splitter/parent-child-splitter';
 import { SEPARATOR_LEVELS } from '../src/splitter/separators';
 import { countTokens } from '../src/splitter/token-counter';
+import { normalizeDocumentContent } from '../src/utils/text-normalize';
 
 const parentConfig = {
   maxChunkSize: 100, overlapSize: 10, minChunkSize: 30,
@@ -34,12 +35,13 @@ describe('ParentChildSplitter', () => {
     }
   });
 
-  it('每个 child 的 offset 对应原文片段', () => {
+  it('每个 child 的 offset 对应规范化后原文片段', () => {
     const s = new ParentChildSplitter(parentConfig, childConfig);
     const text = '段落一。这是第一段的内容。内容比较多。\n\n段落二。这是第二段。内容也很丰富。\n\n段落三。第三段内容。';
+    const normalized = normalizeDocumentContent(text);
     const units = s.split(text);
     for (const u of units) {
-      expect(text.slice(u.startOffset, u.endOffset)).toBe(u.text);
+      expect(normalized.slice(u.startOffset, u.endOffset)).toBe(u.text);
     }
   });
 

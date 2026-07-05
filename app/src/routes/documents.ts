@@ -3,6 +3,7 @@ import { db } from '../db/client';
 import { documents, chunks, datasets as datasetsSchema } from '../db/schema';
 import { eq, and, isNull, desc, sql, inArray } from 'drizzle-orm';
 import { readDocumentText } from '../storage/document-storage';
+import { normalizeDocumentContent } from '../utils/text-normalize';
 import { resetDocumentForReingest, enqueueIngest } from '../pipeline/document-reset';
 import { logger } from '../utils/logger';
 
@@ -68,7 +69,7 @@ app.get('/:id/content', async (c) => {
     .from(documents).where(eq(documents.id, id));
   if (!doc) return c.json({ error: 'Document not found' }, 404);
   try {
-    const content = await readDocumentText(doc.sourcePath);
+    const content = normalizeDocumentContent(await readDocumentText(doc.sourcePath));
     return c.text(content);
   } catch (err) {
     logger.error('[Documents] Failed to read content', { id, sourcePath: doc.sourcePath, err });
