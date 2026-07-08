@@ -75,30 +75,16 @@ export default function Skills() {
     },
   ];
 
-  const expandedRowRender = (record: Skill) => {
-    return (
-      <div style={{ padding: '12px 0' }}>
-        <div style={{ marginBottom: 8 }}>
-          <strong style={{ color: '#1677ff' }}>System Prompt (指令):</strong>
-        </div>
-        <pre style={{
-          background: '#f6f8fa',
-          padding: '12px',
-          borderRadius: '6px',
-          fontSize: '12px',
-          lineHeight: 1.6,
-          maxHeight: '300px',
-          overflowY: 'auto',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
-          margin: 0,
-          border: '1px solid #e5e7eb',
-        }}>
-          {record.instructions || '(无指令)'}
-        </pre>
+  const expandedRowRender = (record: Skill) => (
+    <div style={{ padding: '12px 0' }}>
+      <div style={{ marginBottom: 8 }}>
+        <strong className="kc-skills-prompt-label">System Prompt (指令):</strong>
       </div>
-    );
-  };
+      <pre className="kc-skills-prompt-pre">
+        {record.instructions || '(无指令)'}
+      </pre>
+    </div>
+  );
 
   return (
     <div>
@@ -147,7 +133,7 @@ export default function Skills() {
               optionRender={(opt) => (
                 <div>
                   <div><code>{opt.value}</code></div>
-                  <div style={{ fontSize: 12, color: '#888' }}>{toolOptions.find(x => x.name === opt.value)?.description}</div>
+                  <div className="kc-skills-tool-desc">{toolOptions.find(x => x.name === opt.value)?.description}</div>
                 </div>
               )}
             />

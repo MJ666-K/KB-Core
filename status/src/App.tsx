@@ -1,5 +1,6 @@
+import { useState, useCallback } from 'react';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { Layout, Menu, Typography, Tooltip, Spin } from 'antd';
+import { Layout, Menu, Tooltip, Spin, Button } from 'antd';
 import {
   DashboardOutlined,
   RobotOutlined,
@@ -12,6 +13,8 @@ import {
   LogoutOutlined,
   TeamOutlined,
   UserOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
 } from '@ant-design/icons';
 import Dashboard from './pages/Dashboard';
 import Agents from './pages/Agents';
@@ -27,9 +30,19 @@ import { ProtectedRoute } from './auth/ProtectedRoute';
 import { useAuth, isAuthenticatedSession } from './auth/AuthContext';
 import { CHAT_SUBTITLE } from './chatHints';
 import { hasAnyPermission, MENU_PERMISSIONS, type Permission } from './auth/permissions';
+import { ThemeToggle } from './components/ThemeToggle';
 
 const { Sider, Header, Content } = Layout;
-const { Text } = Typography;
+
+const SIDER_COLLAPSED_KEY = 'kc_sider_collapsed';
+
+function readSiderCollapsed(): boolean {
+  try {
+    return localStorage.getItem(SIDER_COLLAPSED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 
 const ALL_MENU_ITEMS: Array<{
   key: string;
@@ -53,6 +66,18 @@ export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, loading, logout } = useAuth();
+  const [siderCollapsed, setSiderCollapsed] = useState(readSiderCollapsed);
+
+  const toggleSider = useCallback(() => {
+    setSiderCollapsed(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SIDER_COLLAPSED_KEY, next ? '1' : '0');
+      } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+
   const isLoginPage = location.pathname === '/login';
   const authenticated = Boolean(user && isAuthenticatedSession());
 
@@ -99,19 +124,36 @@ export default function App() {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Sider width={220} theme="dark" className="kc-app-sider">
+      <Sider
+        width={220}
+        collapsedWidth={72}
+        theme="dark"
+        className="kc-app-sider"
+        collapsible
+        collapsed={siderCollapsed}
+        onCollapse={collapsed => {
+          setSiderCollapsed(collapsed);
+          try {
+            localStorage.setItem(SIDER_COLLAPSED_KEY, collapsed ? '1' : '0');
+          } catch { /* ignore */ }
+        }}
+        trigger={null}
+      >
         <div className="kc-sider-brand">
           <div className="kc-sider-brand-icon"><BookOutlined /></div>
-          <div className="kc-sider-brand-text">
-            <div className="kc-sider-brand-title">Knowledge Core</div>
-            <div className="kc-sider-brand-sub">法律知识库</div>
-          </div>
+          {!siderCollapsed && (
+            <div className="kc-sider-brand-text">
+              <div className="kc-sider-brand-title">Knowledge Core</div>
+              <div className="kc-sider-brand-sub">法律知识库</div>
+            </div>
+          )}
         </div>
 
         <div className="kc-sider-menu-wrap">
           <Menu
             theme="dark"
             mode="inline"
+            inlineCollapsed={siderCollapsed}
             selectedKeys={[selectedKey]}
             items={menuItems.map(({ key, icon, label }) => ({ key, icon, label }))}
             onClick={e => navigate(e.key)}
@@ -120,25 +162,43 @@ export default function App() {
 
         <div className="kc-sider-footer">
           {user && (
-            <div className="kc-sider-profile">
-              <div className="kc-sider-profile-main">
-                <div className="kc-sider-avatar"><UserOutlined /></div>
-                <div className="kc-sider-profile-text">
-                  <div className="kc-sider-username" title={user.username}>{user.username}</div>
-                  <div className="kc-sider-role">{user.roleLabel || user.role}</div>
-                </div>
+            siderCollapsed ? (
+              <div className="kc-sider-profile kc-sider-profile--collapsed">
+                <Tooltip title={`${user.username} · ${user.roleLabel || user.role}`} placement="right">
+                  <div className="kc-sider-avatar"><UserOutlined /></div>
+                </Tooltip>
+                <Tooltip title="退出登录" placement="right">
+                  <button
+                    type="button"
+                    className="kc-sider-logout-btn"
+                    onClick={() => { void logout().then(() => navigate('/login')); }}
+                    aria-label="退出登录"
+                  >
+                    <LogoutOutlined />
+                  </button>
+                </Tooltip>
               </div>
-              <Tooltip title="退出登录">
-                <button
-                  type="button"
-                  className="kc-sider-logout-btn"
-                  onClick={() => { void logout().then(() => navigate('/login')); }}
-                  aria-label="退出登录"
-                >
-                  <LogoutOutlined />
-                </button>
-              </Tooltip>
-            </div>
+            ) : (
+              <div className="kc-sider-profile">
+                <div className="kc-sider-profile-main">
+                  <div className="kc-sider-avatar"><UserOutlined /></div>
+                  <div className="kc-sider-profile-text">
+                    <div className="kc-sider-username" title={user.username}>{user.username}</div>
+                    <div className="kc-sider-role">{user.roleLabel || user.role}</div>
+                  </div>
+                </div>
+                <Tooltip title="退出登录">
+                  <button
+                    type="button"
+                    className="kc-sider-logout-btn"
+                    onClick={() => { void logout().then(() => navigate('/login')); }}
+                    aria-label="退出登录"
+                  >
+                    <LogoutOutlined />
+                  </button>
+                </Tooltip>
+              </div>
+            )
           )}
         </div>
       </Sider>
@@ -146,17 +206,29 @@ export default function App() {
       <Layout>
         <Header className="kc-app-header">
           <div className="kc-app-header-left">
+            <Tooltip title={siderCollapsed ? '展开侧边栏' : '收起侧边栏'}>
+              <Button
+                type="text"
+                className="kc-app-header-toggle"
+                icon={siderCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                onClick={toggleSider}
+                aria-label={siderCollapsed ? '展开侧边栏' : '收起侧边栏'}
+              />
+            </Tooltip>
             <div className="kc-app-header-icon">{headerDisplay.icon}</div>
             <div className="kc-app-header-titles">
-              <Text strong style={{ fontSize: 16 }}>{headerDisplay.title}</Text>
-              <Text type="secondary" style={{ fontSize: 12 }}>{headerDisplay.subtitle}</Text>
+              <span className="kc-app-header-title">{headerDisplay.title}</span>
+              <span className="kc-app-header-subtitle">{headerDisplay.subtitle}</span>
             </div>
           </div>
-          <div className="kc-app-header-version">v0.1</div>
+          <div className="kc-app-header-right">
+            <ThemeToggle className="kc-app-header-theme" />
+            <div className="kc-app-header-version">v0.1</div>
+          </div>
         </Header>
         <Content
           className={isChatPage ? 'kc-page-content kc-page-content-chat' : 'kc-page-content'}
-          style={{ padding: isChatPage ? undefined : 24 }}
+          style={{ padding: isChatPage ? undefined : 20 }}
         >
           <div className={isChatPage ? 'kc-page-inner kc-page-inner-chat' : 'kc-page-inner'}>
             <Routes>

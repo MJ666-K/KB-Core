@@ -3,6 +3,7 @@ import { Button, Form, Input, Typography, message } from 'antd';
 import { LockOutlined, UserOutlined, BookOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { ThemeToggle } from '../components/ThemeToggle';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -29,6 +30,18 @@ export default function Login() {
 
   return (
     <div className="kc-login-page">
+      <div className="kc-login-bg" aria-hidden>
+        <div className="kc-login-bg-gradient" />
+        <div className="kc-login-bg-orb kc-login-bg-orb--1" />
+        <div className="kc-login-bg-orb kc-login-bg-orb--2" />
+        <div className="kc-login-bg-orb kc-login-bg-orb--3" />
+        <div className="kc-login-bg-grid" />
+        <div className="kc-login-bg-lines" />
+      </div>
+
+      <div className="kc-login-theme-toggle">
+        <ThemeToggle className="kc-login-theme-btn" />
+      </div>
       <div className="kc-login-shell">
         <section className="kc-login-brand">
           <div className="kc-login-brand-inner">
@@ -45,7 +58,8 @@ export default function Login() {
               <li><SafetyCertificateOutlined /> 会话持久化与断线恢复</li>
             </ul>
           </div>
-          <div className="kc-login-brand-glow" aria-hidden />
+          <div className="kc-login-brand-glow kc-login-brand-glow--a" aria-hidden />
+          <div className="kc-login-brand-glow kc-login-brand-glow--b" aria-hidden />
         </section>
 
         <section className="kc-login-panel">

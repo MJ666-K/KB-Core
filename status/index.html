@@ -5,6 +5,15 @@
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%231e40af' d='M4 3a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h5v7H6v2h12v-2h-3v-7h5a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H4zm0 2h16v4H4V5z'/%3E%3C/svg%3E" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Knowledge Core Admin</title>
+    <script>
+      try {
+        var t = localStorage.getItem('kc_theme');
+        if (t === 'dark') {
+          document.documentElement.setAttribute('data-theme', 'dark');
+          document.documentElement.style.colorScheme = 'dark';
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

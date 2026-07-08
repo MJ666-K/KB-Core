@@ -54,15 +54,22 @@ export default function Dashboard() {
     sessionCount: 0,
   };
 
-  const items = [
-    { title: '文档数量', value: s.documentCount, icon: <FileTextOutlined />, color: '#1677ff', bg: '#e6f4ff' },
-    { title: '文档块总数', value: s.chunkCount, icon: <DatabaseOutlined />, color: '#52c41a', bg: '#f6ffed' },
-    { title: '已向量化块', value: s.embeddingCount, icon: <ThunderboltOutlined />, color: '#722ed1', bg: '#f9f0ff' },
-    { title: '今日查询', value: s.todayQueryCount, icon: <SearchOutlined />, color: '#fa8c16', bg: '#fff7e6' },
-    { title: '累计查询', value: s.queryCount, icon: <RobotOutlined />, color: '#13c2c2', bg: '#e6fffb' },
-    { title: '智能体', value: s.agentCount, icon: <ApiOutlined />, color: '#eb2f96', bg: '#fff0f6' },
-    { title: 'Skills', value: s.skillCount, icon: <ToolOutlined />, color: '#2f54eb', bg: '#f0f5ff' },
-    { title: '聊天会话', value: s.sessionCount, icon: <MessageOutlined />, color: '#08979c', bg: '#e6fffb' },
+type StatTone = 'blue' | 'green' | 'purple' | 'orange' | 'cyan' | 'pink' | 'indigo' | 'teal';
+
+  const items: Array<{
+    title: string;
+    value: number;
+    icon: React.ReactNode;
+    tone: StatTone;
+  }> = [
+    { title: '文档数量', value: s.documentCount, icon: <FileTextOutlined />, tone: 'blue' },
+    { title: '文档块总数', value: s.chunkCount, icon: <DatabaseOutlined />, tone: 'green' },
+    { title: '已向量化块', value: s.embeddingCount, icon: <ThunderboltOutlined />, tone: 'purple' },
+    { title: '今日查询', value: s.todayQueryCount, icon: <SearchOutlined />, tone: 'orange' },
+    { title: '累计查询', value: s.queryCount, icon: <RobotOutlined />, tone: 'cyan' },
+    { title: '智能体', value: s.agentCount, icon: <ApiOutlined />, tone: 'pink' },
+    { title: 'Skills', value: s.skillCount, icon: <ToolOutlined />, tone: 'indigo' },
+    { title: '聊天会话', value: s.sessionCount, icon: <MessageOutlined />, tone: 'teal' },
   ];
 
   return (
@@ -75,16 +82,7 @@ export default function Dashboard() {
                 title={item.title}
                 value={item.value}
                 prefix={
-                  <span
-                    style={{
-                      background: item.bg,
-                      color: item.color,
-                      padding: '6px 8px',
-                      borderRadius: 6,
-                      fontSize: 18,
-                      marginRight: 4,
-                    }}
-                  >
+                  <span className={`kc-stat-icon kc-stat-icon--${item.tone}`}>
                     {item.icon}
                   </span>
                 }

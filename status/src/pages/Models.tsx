@@ -47,7 +47,7 @@ export default function Models() {
   const cols = [
     { title: '标识', dataIndex: 'name', key: 'name', render: (v: string) => <code>{v}</code> },
     { title: '显示名', dataIndex: 'displayName', key: 'displayName', render: (v: string) => <strong>{v}</strong> },
-    { title: 'API URL', dataIndex: 'apiUrl', key: 'apiUrl', ellipsis: true, render: (v: string) => v || <span style={{ color: '#00000045' }}>默认</span> },
+    { title: 'API URL', dataIndex: 'apiUrl', key: 'apiUrl', ellipsis: true, render: (v: string) => v || <span className="kc-text-muted">默认</span> },
     { title: 'Temperature', dataIndex: 'temperature', key: 'temperature', render: (v: number) => <Tag color="blue">{v?.toFixed(1) ?? '—'}</Tag> },
     { title: 'MaxTokens', dataIndex: 'maxTokens', key: 'maxTokens', render: (v: number) => <Tag>{v?.toLocaleString() ?? '—'}</Tag> },
     { title: '启用', dataIndex: 'enabled', key: 'enabled', render: (v: boolean) => v ? <Tag color="success">启用</Tag> : <Tag>禁用</Tag> },
@@ -86,8 +86,8 @@ export default function Models() {
           <Form.Item name="apiUrl" label="API URL" style={{ marginTop: 12, marginBottom: 0 }}>
             <Input placeholder="留空使用全局配置" />
           </Form.Item>
-          <div style={{ background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 6, padding: 12, marginTop: 12 }}>
-            <div style={{ fontWeight: 500, marginBottom: 8, fontSize: 12 }}>推理参数</div>
+          <div className="kc-form-params-box">
+            <div className="kc-form-params-box__title">推理参数</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Form.Item name="temperature" label="Temperature" rules={[{ required: true }]} style={{ margin: 0 }}>
                 <InputNumber min={0} max={2} step={0.1} style={{ width: '100%' }} />

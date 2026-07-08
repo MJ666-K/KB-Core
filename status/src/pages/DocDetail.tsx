@@ -124,7 +124,7 @@ export default function DocDetail() {
       .map(ch => ({ ch, range: resolveChunkRange(original, ch) }))
       .sort((a, b) => a.range.start - b.range.start);
 
-    const preStyle = { whiteSpace: 'pre-wrap' as const, fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 13, lineHeight: 1.9, margin: 0, color: '#000000d9' };
+    const preClassName = 'kc-doc-original';
 
     if (flashId) {
       const target = chunks.find(c => c.id === flashId);
@@ -132,7 +132,7 @@ export default function DocDetail() {
         const { start, end } = resolveChunkRange(original, target);
         const hlClass = target.isParent ? 'chunk-parent' : 'chunk-child';
         return (
-          <pre style={preStyle}>
+          <pre className={preClassName}>
             {original.slice(0, start)}
             <span
               className={`chunk-hl ${hlClass} selected flash`}
@@ -170,7 +170,7 @@ export default function DocDetail() {
       }
     }
     if (cursor < original.length) parts.push(original.slice(cursor));
-    return <pre style={preStyle}>{parts}</pre>;
+    return <pre className={preClassName}>{parts}</pre>;
   };
 
   const isSelected = (id: string) => selectedId === id;
@@ -178,18 +178,11 @@ export default function DocDetail() {
   const parentPreview = (p: ChunkWithParent) => (
     <div
       ref={el => { if (el) listItemRefs.current.set(p.id, el); else listItemRefs.current.delete(p.id); }}
-      style={{
-        marginBottom: 8,
-        padding: '10px 12px',
-        background: isSelected(p.id) ? '#e6f4ff' : '#fafafa',
-        borderRadius: 6,
-        border: isSelected(p.id) ? '1px solid #91caff' : '1px solid #f0f0f0',
-        cursor: 'pointer',
-      }}
+      className={`kc-doc-chunk-preview${isSelected(p.id) ? ' is-selected' : ''}`}
       onClick={() => clickChunk(p)}
     >
-      <div style={{ fontSize: 11, color: '#00000073', marginBottom: 6 }}>父块全文 · {p.tokenCount} 词</div>
-      <div style={{ fontSize: 12, color: '#000000a6', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{p.content}</div>
+      <div className="kc-doc-chunk-meta">父块全文 · {p.tokenCount} 词</div>
+      <div className="kc-doc-chunk-content">{p.content}</div>
     </div>
   );
 
@@ -198,7 +191,7 @@ export default function DocDetail() {
     return (
       <List.Item
         key={ch.id}
-        style={{ cursor: 'pointer', background: selected ? '#e6f4ff' : 'transparent', padding: '8px 12px', borderLeft: selected ? '3px solid #1677ff' : '3px solid transparent', transition: 'all 0.15s' }}
+        className={`kc-doc-chunk-item${selected ? ' is-selected' : ''}`}
         onClick={() => clickChunk(ch)}
       >
         <div
@@ -207,21 +200,14 @@ export default function DocDetail() {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
             <Tag color="blue" style={{ margin: 0 }}>C{ch.childIndexWithinParent}</Tag>
-            <span style={{ fontSize: 11, color: '#00000073' }}>{ch.tokenCount} 词</span>
+            <span className="kc-doc-chunk-meta" style={{ marginBottom: 0 }}>{ch.tokenCount} 词</span>
             <Tag color={ch.embeddingStatus === 'done' ? 'success' : ch.embeddingStatus === 'failed' ? 'error' : 'processing'} style={{ margin: 0 }}>
               {embeddingLabels[ch.embeddingStatus] ?? ch.embeddingStatus}
             </Tag>
             <Button type="text" size="small" icon={<CopyOutlined />} style={{ marginLeft: 'auto', padding: '0 4px' }}
               onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(ch.content); message.success('已复制'); }} />
           </div>
-          <div style={{
-            fontSize: 12,
-            color: '#000000a6',
-            lineHeight: 1.6,
-            ...(selected
-              ? { whiteSpace: 'pre-wrap' as const }
-              : { display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' }),
-          }}>{ch.content}</div>
+          <div className={`kc-doc-chunk-item-text${selected ? ' is-expanded' : ' is-clamped'}`}>{ch.content}</div>
         </div>
       </List.Item>
     );
@@ -272,7 +258,7 @@ export default function DocDetail() {
         </Col>
         <Col span={8} style={{ height: '100%' }}>
           <Card bordered={false} styles={{ body: { padding: 0, height: '100%', overflowY: 'auto' } }} style={{ height: '100%' }}>
-            <div style={{ padding: '8px 12px', borderBottom: '1px solid #f0f0f0', position: 'sticky', top: 0, background: '#fff', zIndex: 1 }}>
+            <div className="kc-doc-sidebar-head">
               <Input placeholder="搜索切片..." prefix={<SearchOutlined />} value={chunkSearch} onChange={e => setChunkSearch(e.target.value)} allowClear size="small" />
             </div>
             <Collapse
@@ -290,17 +276,11 @@ export default function DocDetail() {
                   header={
                     <div
                       onClick={e => { e.stopPropagation(); clickChunk(p); }}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 6,
-                        background: panelSelected ? '#e6f4ff' : undefined,
-                        margin: panelSelected ? '-8px -12px' : undefined,
-                        padding: panelSelected ? '8px 12px' : undefined,
-                        borderRadius: panelSelected ? 4 : undefined,
-                      }}
+                      className={`kc-doc-panel-header${panelSelected ? ' is-selected' : ''}`}
                     >
                       <Tag color="geekblue" style={{ margin: 0 }}>P{p.parentChunkIndex}</Tag>
                       <strong style={{ fontSize: 13 }}>父块 {p.parentChunkIndex}</strong>
-                      <span style={{ fontSize: 11, color: '#00000073' }}>{p.tokenCount} 词</span>
+                      <span className="kc-doc-chunk-meta" style={{ marginBottom: 0 }}>{p.tokenCount} 词</span>
                       <Tag color="default" style={{ margin: 0, fontSize: 10 }}>不参与嵌入</Tag>
                     </div>
                   }
@@ -308,7 +288,7 @@ export default function DocDetail() {
                 >
                   {parentPreview(p)}
                   {childrenOf(p.id).length > 0 && (
-                    <div style={{ fontSize: 11, color: '#00000073', marginBottom: 4, paddingLeft: 4 }}>子块</div>
+                    <div className="kc-doc-subchunk-label">子块</div>
                   )}
                   <List dataSource={childrenOf(p.id)} renderItem={chunkCard} split={false} size="small" />
                 </Panel>
@@ -316,7 +296,7 @@ export default function DocDetail() {
               })}
             </Collapse>
             {filteredParents.length === 0 && (
-              <div style={{ padding: '24px', textAlign: 'center', color: '#00000045', fontSize: 13 }}>
+              <div className="kc-doc-empty">
                 {chunkSearch ? '未找到匹配的切片' : '无切片数据'}
               </div>
             )}

@@ -66,7 +66,7 @@ export default function Agents() {
     {
       title: '数据集', dataIndex: 'datasetIds', key: 'datasetIds',
       render: (ids: string[]) => {
-        if (!ids?.length) return <span style={{ color: '#00000045' }}>—</span>;
+        if (!ids?.length) return <span className="kc-text-muted">—</span>;
         return (
           <Space size={[4, 4]} wrap>
             {ids.map(id => {

@@ -16,6 +16,7 @@ import { CopyOutlined, CheckOutlined, LoadingOutlined } from '@ant-design/icons'
 import { message } from 'antd';
 import { normalizeCitationMarkers } from './normalizeCitationMarkers';
 import { sanitizeAnswerContent } from './sanitizeAnswerContent';
+import { useTheme } from './theme/ThemeContext';
 
 interface Props {
   content: string;
@@ -27,16 +28,56 @@ interface Props {
 const MERMAID_LANGS = new Set(['mermaid', 'flowchart', 'graph']);
 
 let mermaidInit: Promise<typeof import('mermaid')['default']> | null = null;
+let mermaidThemeCache: 'dark' | 'neutral' | null = null;
 
-function loadMermaid() {
-  if (!mermaidInit) {
+function loadMermaid(isDark: boolean) {
+  const themeName = isDark ? 'dark' : 'neutral';
+  if (!mermaidInit || mermaidThemeCache !== themeName) {
+    mermaidThemeCache = themeName;
     mermaidInit = import('mermaid').then(m => {
       m.default.initialize({
         startOnLoad: false,
-        theme: 'neutral',
+        theme: themeName,
         securityLevel: 'loose',
         fontFamily: 'inherit',
         suppressErrorRendering: true,
+        ...(isDark
+          ? {
+              themeVariables: {
+                background: '#1e293b',
+                mainBkg: '#1e293b',
+                secondBkg: '#172033',
+                tertiaryColor: '#334155',
+                primaryColor: '#1e293b',
+                primaryTextColor: '#f1f5f9',
+                primaryBorderColor: '#3b82f6',
+                secondaryColor: '#334155',
+                secondaryTextColor: '#e2e8f0',
+                secondaryBorderColor: '#475569',
+                tertiaryTextColor: '#cbd5e1',
+                lineColor: '#64748b',
+                textColor: '#f1f5f9',
+                nodeTextColor: '#f1f5f9',
+                titleColor: '#f1f5f9',
+                edgeLabelBackground: '#1e293b',
+                clusterBkg: '#172033',
+                clusterBorder: '#334155',
+                defaultLinkColor: '#64748b',
+                nodeBorder: '#3b82f6',
+                actorBkg: '#1e293b',
+                actorBorder: '#3b82f6',
+                actorTextColor: '#f1f5f9',
+                signalColor: '#64748b',
+                labelBoxBkgColor: '#172033',
+                labelBoxBorderColor: '#334155',
+                labelTextColor: '#e2e8f0',
+                loopTextColor: '#e2e8f0',
+                noteBkgColor: '#334155',
+                noteTextColor: '#f1f5f9',
+                noteBorderColor: '#475569',
+              },
+            }
+          : {}),
       });
       return m.default;
     });
@@ -115,6 +156,7 @@ function MermaidDiagram({ source, streaming }: { source: string; streaming: bool
   const baseId = useId().replace(/:/g, '');
   const [failed, setFailed] = useState(false);
   const [rendering, setRendering] = useState(false);
+  const { isDark } = useTheme();
 
   useEffect(() => {
     if (streaming) {
@@ -141,7 +183,7 @@ function MermaidDiagram({ source, streaming }: { source: string; streaming: bool
       if (containerRef.current) containerRef.current.innerHTML = '';
 
       try {
-        const mermaid = await loadMermaid();
+        const mermaid = await loadMermaid(isDark);
         if (cancelled || !containerRef.current) return;
 
         await mermaid.parse(normalized);
@@ -160,7 +202,7 @@ function MermaidDiagram({ source, streaming }: { source: string; streaming: bool
     })();
 
     return () => { cancelled = true; };
-  }, [source, baseId, streaming]);
+  }, [source, baseId, streaming, isDark]);
 
   const showPlaceholder = streaming || rendering;
 
