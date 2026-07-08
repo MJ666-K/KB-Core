@@ -6,6 +6,7 @@ import {
   useId,
   useRef,
   useState,
+  memo,
   type ReactElement,
   type ReactNode,
 } from 'react';
@@ -242,7 +243,7 @@ function extractCodeFromPre(children: ReactNode): { lang: string; code: string }
   return { lang, code };
 }
 
-export default function MarkdownContent({ content, className = 'kc-chat-md', streaming = false }: Props) {
+const MarkdownContent = memo(function MarkdownContent({ content, className = 'kc-chat-md', streaming = false }: Props) {
   const normalized = wrapCitationRefs(normalizeCitationMarkers(sanitizeAnswerContent(content)));
   if (!normalized.trim()) return null;
 
@@ -280,4 +281,6 @@ export default function MarkdownContent({ content, className = 'kc-chat-md', str
       </ReactMarkdown>
     </div>
   );
-}
+});
+
+export default MarkdownContent;

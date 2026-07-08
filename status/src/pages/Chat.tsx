@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, memo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Input, Button, Card, Typography, Popconfirm, message, Spin, Collapse,
 } from 'antd';
 import {
   SendOutlined, PaperClipOutlined, RobotOutlined, UserOutlined, LoadingOutlined,
-  PlusOutlined, DeleteOutlined, MessageOutlined,
+  PlusOutlined, DeleteOutlined, MessageOutlined, StopOutlined,
 } from '@ant-design/icons';
 import { api } from '../api';
 import MarkdownContent from '../MarkdownContent';
@@ -163,10 +163,8 @@ function dbToAgentMsg(m: {
 export default function Chat() {
   const navigate = useNavigate();
   const { sessionId: urlSessionId } = useParams<{ sessionId?: string }>();
-  const [question, setQuestion] = useState('');
   const [messages, setMessages] = useState<AgentMsg[]>([]);
   const [loading, setLoading] = useState(false);
-  const [inputWhileLoading, setInputWhileLoading] = useState(false);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [loadingSession, setLoadingSession] = useState(false);
@@ -182,6 +180,8 @@ export default function Chat() {
   const endRef = useRef<HTMLDivElement>(null);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
+  const scrollRafRef = useRef<number | null>(null);
+  const stoppedByUserRef = useRef(false);
   const historyRef = useRef<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
   const pendingSessionNavRef = useRef<string | null>(null);
   const pendingAssistantRef = useRef<AgentMsg | null>(null);
@@ -232,9 +232,16 @@ export default function Chat() {
   }, []);
 
   useEffect(() => {
-    const el = messagesScrollRef.current;
-    if (!el || !stickToBottomRef.current) return;
-    el.scrollTop = el.scrollHeight;
+    if (!stickToBottomRef.current) return;
+    if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current);
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      const el = messagesScrollRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    });
+    return () => {
+      if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current);
+    };
   }, [messages]);
 
   useEffect(() => () => {
@@ -249,7 +256,6 @@ export default function Chat() {
       if (msg.id !== id) return msg;
       const next = fn(msg);
       assistantDraftRef.current = next;
-      setInputWhileLoading(next.phase === 'writing');
       return next;
     }));
   }, []);
@@ -406,7 +412,6 @@ export default function Chat() {
     activeJobIdRef.current = null;
     stopJobPollingRef.current();
     setLoading(false);
-    setInputWhileLoading(false);
 
     const draft = assistantDraftRef.current;
     assistantDraftRef.current = null;
@@ -630,6 +635,10 @@ export default function Chat() {
     };
     ws.onclose = () => {
       wsAuthedRef.current = false;
+      if (stoppedByUserRef.current) {
+        stoppedByUserRef.current = false;
+        return;
+      }
       if (!assistantIdRef.current || finishedRef.current) return;
       void flushAssistantDraftRef.current();
       if (activeJobIdRef.current) {
@@ -728,7 +737,6 @@ export default function Chat() {
     });
 
     setLoading(true);
-    setInputWhileLoading(false);
     stickToBottomRef.current = true;
     if (!savedAssistantMsgIdRef.current) {
       void ensureAssistantMessage();
@@ -752,7 +760,6 @@ export default function Chat() {
     setSessionId(null);
     setMessages([]);
     historyRef.current = [];
-    setQuestion('');
     navigate('/chat');
   }, [loading, navigate, setSessionId]);
 
@@ -806,7 +813,6 @@ export default function Chat() {
         setSessionId(null);
         setMessages([]);
         historyRef.current = [];
-        setQuestion('');
       }
       return;
     }
@@ -834,8 +840,8 @@ export default function Chat() {
     }
   }, [activeSessionId, startNewChat, refreshSessions]);
 
-  const send = useCallback(async (q?: string) => {
-    const text = (q ?? question).trim();
+  const send = useCallback(async (q: string) => {
+    const text = q.trim();
     if (!text || loading) return;
 
     let sessionId = sessionIdRef.current;
@@ -878,9 +884,7 @@ export default function Chat() {
     querySessionIdRef.current = sessionId;
     setMessages(prev => [...prev, userMsg, botMsg]);
     historyRef.current = [...historyRef.current, { role: 'user', content: text }];
-    setQuestion('');
     setLoading(true);
-    setInputWhileLoading(false);
     stickToBottomRef.current = true;
     void refreshSessions();
 
@@ -892,7 +896,30 @@ export default function Chat() {
     });
 
     connectWsWithPayload(payload);
-  }, [question, loading, connectWsWithPayload, refreshSessions, navigate, setSessionId]);
+  }, [loading, connectWsWithPayload, refreshSessions, navigate, setSessionId]);
+
+  const stopGeneration = useCallback(() => {
+    if (!loading || finishedRef.current) return;
+    stoppedByUserRef.current = true;
+    stopJobPollingRef.current();
+    if (syncDraftTimerRef.current) {
+      clearTimeout(syncDraftTimerRef.current);
+      syncDraftTimerRef.current = null;
+    }
+    const draft = assistantDraftRef.current;
+    const partial = draft?.content?.trim();
+    finishAssistant({
+      content: partial || '（已停止生成）',
+      citations: draft?.citations ?? [],
+      termination: 'cancelled',
+      phase: 'done',
+    });
+    wsRef.current?.close();
+  }, [loading, finishAssistant]);
+
+  const sendRef = useRef(send);
+  sendRef.current = send;
+  const handleFollowUp = useCallback((q: string) => { void sendRef.current(q); }, []);
 
   const grouped = groupSessions(sessions);
   const isDraft = activeSessionId === null && messages.length === 0;
@@ -993,7 +1020,7 @@ export default function Chat() {
                   <MsgBubble
                     key={m.id}
                     msg={m}
-                    onFollowUp={q => { void send(q); }}
+                    onFollowUp={handleFollowUp}
                   />
                 ))}
                 <div ref={endRef} />
@@ -1002,27 +1029,12 @@ export default function Chat() {
           </div>
 
           <div className="kc-chat-input-bar">
-            <div className="kc-chat-input-inner">
-              <div className="kc-chat-input-row">
-              <TextArea
-                value={question}
-                onChange={e => setQuestion(e.target.value)}
-                onPressEnter={e => { if (!e.shiftKey) { e.preventDefault(); void send(); } }}
-                placeholder="输入法律问题，Enter 发送，Shift+Enter 换行..."
-                autoSize={{ minRows: 1, maxRows: 4 }}
-                disabled={loading && !inputWhileLoading}
-              />
-              <Button
-                type="primary"
-                icon={loading ? <LoadingOutlined /> : <SendOutlined />}
-                onClick={() => { void send(); }}
-                disabled={(loading && !inputWhileLoading) || !question.trim()}
-                className="kc-chat-send-btn"
-              >
-                {loading ? '处理中' : '发送'}
-              </Button>
-            </div>
-            </div>
+            <ChatInputBar
+              key={activeSessionId ?? 'draft'}
+              loading={loading}
+              onSend={send}
+              onStop={stopGeneration}
+            />
             <p className="kc-chat-disclaimer">
             以上内容仅供参考，不构成法律意见。具体问题请咨询专业律师。
             </p>
@@ -1058,7 +1070,23 @@ function AgentProgress({ msg }: { msg: AgentMsg }) {
   );
 }
 
-function MsgBubble({
+function msgBubbleEqual(
+  prev: Readonly<{ msg: AgentMsg; onFollowUp?: (q: string) => void }>,
+  next: Readonly<{ msg: AgentMsg; onFollowUp?: (q: string) => void }>,
+): boolean {
+  const a = prev.msg;
+  const b = next.msg;
+  return a.id === b.id
+    && a.content === b.content
+    && a.phase === b.phase
+    && a.citations.length === b.citations.length
+    && (a.followUpQuestions?.length ?? 0) === (b.followUpQuestions?.length ?? 0)
+    && a.latencyMs === b.latencyMs
+    && a.toolCalls.length === b.toolCalls.length
+    && prev.onFollowUp === next.onFollowUp;
+}
+
+const MsgBubble = memo(function MsgBubble({
   msg,
   onFollowUp,
 }: {
@@ -1152,4 +1180,64 @@ function MsgBubble({
       </div>
     </div>
   );
-}
+}, msgBubbleEqual);
+
+const ChatInputBar = memo(function ChatInputBar({
+  loading,
+  onSend,
+  onStop,
+}: {
+  loading: boolean;
+  onSend: (text: string) => void;
+  onStop: () => void;
+}) {
+  const [question, setQuestion] = useState('');
+
+  const submit = useCallback(() => {
+    const text = question.trim();
+    if (!text || loading) return;
+    setQuestion('');
+    onSend(text);
+  }, [question, loading, onSend]);
+
+  return (
+    <div className="kc-chat-input-inner">
+      <div className="kc-chat-input-row">
+        <TextArea
+          value={question}
+          onChange={e => setQuestion(e.target.value)}
+          onPressEnter={e => {
+            if (!e.shiftKey) {
+              e.preventDefault();
+              if (loading) return;
+              submit();
+            }
+          }}
+          placeholder="输入法律问题，Enter 发送，Shift+Enter 换行..."
+          className="kc-chat-input-field"
+        />
+        {loading ? (
+          <Button
+            danger
+            type="primary"
+            icon={<StopOutlined />}
+            onClick={onStop}
+            className="kc-chat-stop-btn"
+          >
+            停止
+          </Button>
+        ) : (
+          <Button
+            type="primary"
+            icon={<SendOutlined />}
+            onClick={submit}
+            disabled={!question.trim()}
+            className="kc-chat-send-btn"
+          >
+            发送
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+});
