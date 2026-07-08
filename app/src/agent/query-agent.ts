@@ -6,7 +6,7 @@ import type { SkillContext, SkillResult } from '../skills/types';
 import { SkillExecutor } from '../skills/executor';
 import { drainRetrievalDetails } from '../tools/search-knowledge';
 import type { Citation, ToolCallRecord, AgentStep } from '../db/schema';
-import { formatCitations, deduplicateChunks } from '../skills/types';
+import { formatCitations, deduplicateChunks, SYNTHESIS_FINAL_HINT } from '../skills/types';
 import type { RetrievalResult } from '../retrieve/retriever';
 import { buildSystemPrompt } from './system-prompt';
 import type { QueryOptions, QueryResult, EventStream } from './types';
@@ -266,7 +266,7 @@ export class QueryAgent {
 
       const tokenBuffer: string[] = [];
       const synthStart = Date.now();
-      for await (const chunk of this.llm.chatStream({ messages: [...messages, { role: 'user', content: '请基于以上检索到的资料，给出最终回答。' }], ...this.buildModelChatOptions() })) {
+      for await (const chunk of this.llm.chatStream({ messages: [...messages, { role: 'user', content: SYNTHESIS_FINAL_HINT }], ...this.buildModelChatOptions() })) {
         if (chunk.type === 'token' && chunk.content) {
           tokenBuffer.push(chunk.content);
           events.emit({ type: 'answer_token', token: chunk.content });
@@ -278,7 +278,7 @@ export class QueryAgent {
       return { answer: tokenBuffer.join('') || '（无法生成回答）', citations: fallbackCitations, termination: 'synthesis' };
     }
 
-    const finalResponse = await this.llm.chat({ messages: [...messages, { role: 'user', content: '请基于以上检索到的资料，给出最终回答。标注引用来源。' }], ...this.buildModelChatOptions() });
+    const finalResponse = await this.llm.chat({ messages: [...messages, { role: 'user', content: SYNTHESIS_FINAL_HINT }], ...this.buildModelChatOptions() });
     return { answer: finalResponse.content ?? '（无法生成回答）', citations: fallbackCitations, termination: 'synthesis' };
   }
 

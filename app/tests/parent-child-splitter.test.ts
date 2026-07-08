@@ -35,13 +35,17 @@ describe('ParentChildSplitter', () => {
     }
   });
 
-  it('每个 child 的 offset 对应规范化后原文片段', () => {
+  it('每个 unit 的 offset 对应规范化后原文片段', () => {
     const s = new ParentChildSplitter(parentConfig, childConfig);
     const text = '段落一。这是第一段的内容。内容比较多。\n\n段落二。这是第二段。内容也很丰富。\n\n段落三。第三段内容。';
     const normalized = normalizeDocumentContent(text);
     const units = s.split(text);
     for (const u of units) {
-      expect(normalized.slice(u.startOffset, u.endOffset)).toBe(u.text);
+      // u.text 即原片段 = normalized.slice(start,end)
+      const originalSlice = normalized.slice(u.startOffset, u.endOffset);
+      expect(u.text).toBe(originalSlice);
+      // 同时保证 start/end 真的指向原文物理位置
+      expect(u.endOffset - u.startOffset).toBe(originalSlice.length);
     }
   });
 

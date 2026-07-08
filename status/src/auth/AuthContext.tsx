@@ -19,6 +19,24 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null);
 
+const AUTH_EXPIRED_EVENT = 'kc:auth-expired';
+
+export function isAuthenticatedSession(): boolean {
+  return Boolean(getAuthToken() && getStoredUser());
+}
+
+function redirectToLogin(): void {
+  if (typeof window === 'undefined') return;
+  if (window.location.pathname.startsWith('/login')) return;
+  window.location.replace('/login');
+}
+
+function notifyAuthExpired(): void {
+  clearAuthSession();
+  window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+  redirectToLogin();
+}
+
 async function authJson<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, init);
   if (!r.ok) {
@@ -29,18 +47,21 @@ async function authJson<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<StoredUser | null>(() => getStoredUser());
+  const [user, setUser] = useState<StoredUser | null>(null);
   const [loading, setLoading] = useState(true);
   const refreshingRef = useRef<Promise<boolean> | null>(null);
+
+  useEffect(() => {
+    const onExpired = () => setUser(null);
+    window.addEventListener(AUTH_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired);
+  }, []);
 
   const refreshIfNeeded = useCallback(async (): Promise<boolean> => {
     if (refreshingRef.current) return refreshingRef.current;
 
     const refreshToken = getRefreshToken();
-    if (!refreshToken) {
-      if (getAuthToken()) return true;
-      return false;
-    }
+    if (!refreshToken) return false;
 
     refreshingRef.current = authJson<{
       accessToken: string;
@@ -54,44 +75,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       saveAuthSession(data);
       setUser(data.user);
       return true;
-    }).catch(() => {
-      clearAuthSession();
-      setUser(null);
-      return false;
-    }).finally(() => {
+    }).catch(() => false).finally(() => {
       refreshingRef.current = null;
     });
 
     return refreshingRef.current;
   }, []);
 
-  useEffect(() => {
-    void (async () => {
-      const token = getAuthToken();
-      if (!token) {
-        setLoading(false);
-        return;
+  const validateSession = useCallback(async (): Promise<boolean> => {
+    let token = getAuthToken();
+    if (!token) {
+      clearAuthSession();
+      setUser(null);
+      return false;
+    }
+
+    if (getRefreshToken()) {
+      const refreshed = await refreshIfNeeded();
+      if (!refreshed) {
+        clearAuthSession();
+        setUser(null);
+        return false;
       }
-      if (getRefreshToken()) {
-        await refreshIfNeeded();
-      } else {
-        try {
-          const me = await authJson<{ user: StoredUser }>('/api/auth/me', {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          setUser(me.user);
-          const stored = getStoredUser();
-          if (stored) {
-            saveAuthSession({ accessToken: token, refreshToken: getRefreshToken() ?? '', user: me.user });
-          }
-        } catch {
-          clearAuthSession();
-          setUser(null);
-        }
-      }
-      setLoading(false);
-    })();
+      token = getAuthToken();
+    }
+
+    if (!token) {
+      clearAuthSession();
+      setUser(null);
+      return false;
+    }
+
+    try {
+      const me = await authJson<{ user: StoredUser }>('/api/auth/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setUser(me.user);
+      saveAuthSession({
+        accessToken: token,
+        refreshToken: getRefreshToken() ?? '',
+        user: me.user,
+      });
+      return true;
+    } catch {
+      clearAuthSession();
+      setUser(null);
+      return false;
+    }
   }, [refreshIfNeeded]);
+
+  useEffect(() => {
+    void validateSession().finally(() => setLoading(false));
+  }, [validateSession]);
 
   const login = useCallback(async (username: string, password: string) => {
     const data = await authJson<{
@@ -151,25 +186,25 @@ export async function authFetch(input: RequestInfo | URL, init: RequestInit = {}
   if (response.status !== 401) return response;
 
   const refreshToken = getRefreshToken();
-  if (!refreshToken) return response;
+  if (refreshToken) {
+    const refreshed = await authJson<{
+      accessToken: string;
+      refreshToken: string;
+      user: StoredUser;
+    }>('/api/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    }).catch(() => null);
 
-  const refreshed = await authJson<{
-    accessToken: string;
-    refreshToken: string;
-    user: StoredUser;
-  }>('/api/auth/refresh', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refreshToken }),
-  }).catch(() => null);
-
-  if (!refreshed) {
-    clearAuthSession();
-    return response;
+    if (refreshed) {
+      saveAuthSession(refreshed);
+      headers.set('Authorization', `Bearer ${refreshed.accessToken}`);
+      response = await fetch(input, { ...init, headers });
+      if (response.status !== 401) return response;
+    }
   }
 
-  saveAuthSession(refreshed);
-  headers.set('Authorization', `Bearer ${refreshed.accessToken}`);
-  response = await fetch(input, { ...init, headers });
+  notifyAuthExpired();
   return response;
 }

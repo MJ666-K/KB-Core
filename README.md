@@ -150,8 +150,8 @@ bun run worker              # 另开终端：启动入库 Worker
 
 ```bash
 cd status
-npm install
-npm run dev                 # 默认 http://localhost:5173
+bun install
+bun run dev                 # 默认 http://localhost:5173
 ```
 
 前端开发模式下默认连接 `http://localhost:3000` 的后端。
@@ -233,9 +233,9 @@ bun run chat                # 终端对话（调试用）
 前端（在 `status/`）：
 
 ```bash
-npm run dev                 # 开发服务
-npm run build               # 生产构建
-npm run typecheck           # 类型检查
+bun run dev                 # 开发服务
+bun run build               # 生产构建
+bun run typecheck           # 类型检查
 ```
 
 ## 配置说明

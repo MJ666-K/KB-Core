@@ -1,5 +1,5 @@
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { Layout, Menu, Typography, Tooltip } from 'antd';
+import { Layout, Menu, Typography, Tooltip, Spin } from 'antd';
 import {
   DashboardOutlined,
   RobotOutlined,
@@ -24,7 +24,7 @@ import Settings from './pages/Settings';
 import Users from './pages/Users';
 import Login from './pages/Login';
 import { ProtectedRoute } from './auth/ProtectedRoute';
-import { useAuth } from './auth/AuthContext';
+import { useAuth, isAuthenticatedSession } from './auth/AuthContext';
 import { CHAT_SUBTITLE } from './chatHints';
 import { hasAnyPermission, MENU_PERMISSIONS, type Permission } from './auth/permissions';
 
@@ -52,8 +52,33 @@ const ALL_MENU_ITEMS: Array<{
 export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user, loading, logout } = useAuth();
   const isLoginPage = location.pathname === '/login';
+  const authenticated = Boolean(user && isAuthenticatedSession());
+
+  if (loading) {
+    return (
+      <div className="kc-auth-loading">
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  if (isLoginPage) {
+    if (authenticated) {
+      return <Navigate to="/chat" replace />;
+    }
+    return (
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    );
+  }
+
+  if (!authenticated) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  }
 
   const menuItems = ALL_MENU_ITEMS.filter(m =>
     hasAnyPermission(user?.permissions, m.permissions),
@@ -71,15 +96,6 @@ export default function App() {
   const headerDisplay = isDocDetail
     ? { icon: currentItem?.icon, title: '文档详情', subtitle: '原文与切片查看器' }
     : { icon: currentItem?.icon, title: currentItem?.title || '控制台', subtitle: currentItem?.subtitle };
-
-  if (isLoginPage) {
-    return (
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
-    );
-  }
 
   return (
     <Layout style={{ minHeight: '100vh' }}>

@@ -10,7 +10,7 @@ import {
 import { api } from '../api';
 import MarkdownContent from '../MarkdownContent';
 import { sanitizeAnswerContent } from '../sanitizeAnswerContent';
-import { actionLabel, statusMessage, aggregateCalls, shouldShowAction } from '../chatLabels';
+import { statusMessage, shouldShowAction } from '../chatLabels';
 import {
   groupSessions, SESSION_GROUP_ORDER, SESSION_GROUP_LABELS,
   type SessionSummary,
@@ -167,7 +167,6 @@ export default function Chat() {
   const [messages, setMessages] = useState<AgentMsg[]>([]);
   const [loading, setLoading] = useState(false);
   const [inputWhileLoading, setInputWhileLoading] = useState(false);
-  const [skillLabels, setSkillLabels] = useState<Map<string, string>>(new Map());
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [loadingSession, setLoadingSession] = useState(false);
@@ -220,15 +219,6 @@ export default function Chat() {
   }, []);
 
   useEffect(() => {
-    api.getSkills()
-      .then(r => {
-        const map = new Map<string, string>();
-        for (const s of r.skills ?? []) {
-          if (s.name && s.displayName) map.set(s.name, s.displayName);
-        }
-        setSkillLabels(map);
-      })
-      .catch(() => { /* fallback */ });
     void refreshSessions();
     api.getDocuments()
       .then(r => setHints(buildChatHints(r.documents ?? [])))
@@ -1003,7 +993,6 @@ export default function Chat() {
                   <MsgBubble
                     key={m.id}
                     msg={m}
-                    skillLabels={skillLabels}
                     onFollowUp={q => { void send(q); }}
                   />
                 ))}
@@ -1069,39 +1058,11 @@ function AgentProgress({ msg }: { msg: AgentMsg }) {
   );
 }
 
-function DoneActions({
-  msg,
-  skillLabels,
-}: {
-  msg: AgentMsg;
-  skillLabels: Map<string, string>;
-}) {
-  const aggregated = aggregateCalls(msg.toolCalls);
-  if (aggregated.length === 0) return null;
-
-  return (
-    <div className="kc-chat-tools">
-      {aggregated.map(({ name, kind, count }) => {
-        const isSkill = kind === 'skill';
-        const cls = `kc-chat-tool-tag ${isSkill ? 'kc-chat-tool-skill' : 'kc-chat-tool-tool'}`;
-        const label = actionLabel(name, skillLabels);
-        return (
-          <span key={name} className={cls}>
-            {label}{count > 1 ? ` ×${count}` : ''}
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
 function MsgBubble({
   msg,
-  skillLabels,
   onFollowUp,
 }: {
   msg: AgentMsg;
-  skillLabels: Map<string, string>;
   onFollowUp?: (q: string) => void;
 }) {
   if (msg.role === 'user') {
@@ -1123,15 +1084,13 @@ function MsgBubble({
       <div className="kc-chat-bubble-agent">
         <AgentProgress msg={msg} />
 
-        {isDone && <DoneActions msg={msg} skillLabels={skillLabels} />}
-
         <div className={`kc-chat-answer-area${!msg.content && !isDone ? ' kc-chat-answer-area--empty' : ''}`}>
           {msg.content ? (
             <div className="kc-chat-answer">
               {msg.phase === 'error' ? (
                 <span>{msg.content}</span>
               ) : (
-                <MarkdownContent content={msg.content} />
+                <MarkdownContent content={msg.content} streaming={msg.phase === 'writing'} />
               )}
               {msg.phase === 'writing' && <span className="kc-chat-cursor">▍</span>}
             </div>

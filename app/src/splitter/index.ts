@@ -17,14 +17,15 @@ export function createSplitterWithConfig(
     {
       maxChunkSize: parentTokens,
       overlapSize: Math.floor(overlapTokens * 1.5),
-      minChunkSize: Math.floor(parentTokens / 4),
+      // minChunkSize 调小到 /16（≈ 16 token），避免「将第一条修改为」类极短行被当独立 chunk
+      minChunkSize: Math.floor(parentTokens / 16),
       lengthFunction: countTokens,
       separators: SEPARATOR_LEVELS,
     },
     {
       maxChunkSize: childTokens,
       overlapSize: overlapTokens,
-      minChunkSize: Math.floor(childTokens / 3),
+      minChunkSize: Math.floor(childTokens / 8),
       lengthFunction: countTokens,
       separators: SEPARATOR_LEVELS,
     },

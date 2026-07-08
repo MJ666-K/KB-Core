@@ -1,6 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { Spin } from 'antd';
-import { useAuth } from './AuthContext';
+import { useAuth, isAuthenticatedSession } from './AuthContext';
 import { canAccessPath } from './permissions';
 
 export function ProtectedRoute() {
@@ -15,7 +15,7 @@ export function ProtectedRoute() {
     );
   }
 
-  if (!user) {
+  if (!user || !isAuthenticatedSession()) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 

@@ -124,7 +124,7 @@ export class SkillExecutor {
 
     logger.warn(`[SkillExecutor] max ${MAX_SKILL_ITERATIONS} iterations, forcing answer`);
     const forceHint = allRetrievalResults.length > 0
-      ? '请基于以上检索到的法律条文给出最终回答。'
+      ? RETRIEVAL_FINAL_HINT
       : NO_RETRIEVAL_FINAL_HINT;
     const forceMessages = [...messages, { role: 'user' as const, content: forceHint }];
     const answer = await this.streamFinalAnswer(ctx, forceMessages);
