@@ -52,36 +52,30 @@ export async function seedModels(): Promise<void> {
   logger.info(`[Seed] models ensured (${PRESET_MODELS.length})`);
 }
 
-/** 幂等写入预设角色与权限（缺失项补全，不删用户自定义权限） */
+/** 幂等写入预设角色与权限（仅首次创建；已存在角色不覆盖用户修改） */
 export async function seedPresetRoles(): Promise<void> {
+  let created = 0;
   for (const preset of PRESET_ROLES) {
-    let role = await db.query.roles.findFirst({ where: eq(roles.key, preset.key) });
-    if (!role) {
-      [role] = await db.insert(roles).values({
-        key: preset.key,
-        label: preset.label,
-        description: preset.description,
-        isSystem: preset.isSystem,
-      }).returning();
-    } else {
-      await db.update(roles).set({
-        label: preset.label,
-        description: preset.description,
-        isSystem: preset.isSystem,
-        updatedAt: new Date(),
-      }).where(eq(roles.id, role.id));
-    }
+    const existing = await db.query.roles.findFirst({ where: eq(roles.key, preset.key) });
+    if (existing) continue;
 
-    for (const permission of preset.permissions) {
-      await db.insert(rolePermissions).values({
-        roleId: role!.id,
-        permission,
-      }).onConflictDoNothing();
+    const [role] = await db.insert(roles).values({
+      key: preset.key,
+      label: preset.label,
+      description: preset.description,
+      isSystem: preset.isSystem,
+    }).returning();
+
+    if (preset.permissions.length > 0) {
+      await db.insert(rolePermissions).values(
+        preset.permissions.map(permission => ({ roleId: role!.id, permission })),
+      ).onConflictDoNothing();
     }
+    created++;
   }
 
   invalidateRoleCache();
-  logger.info(`[Seed] roles ensured (${PRESET_ROLES.length})`);
+  logger.info(`[Seed] roles ensured (${PRESET_ROLES.length}, created ${created})`);
 }
 
 /** 幂等写入预设智能体 */

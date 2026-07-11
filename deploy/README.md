@@ -23,10 +23,17 @@ cp .env.example .env    # 首次
 
 | 存储 | 方式 | 说明 |
 |------|------|------|
-| PostgreSQL | Docker 卷 `kc_pgdata` | 不再挂载 `./db`，避免权限 700 问题 |
-| Redis | Docker 卷 `kc_redisdata` | 不再挂载 `./redis` |
-| 上传文档 | `./app/documents` | 宿主机目录，方便备份 |
-| 运行时配置 | `./app/data` | settings.json 等 |
+| PostgreSQL | Docker 卷 `kc_pgdata` | 用户、角色、权限、文档元数据等 |
+| Redis | Docker 卷 `kc_redisdata` | 会话、队列等 |
+| 上传文档 | `./data`（compose 挂载） | 宿主机目录，方便备份 |
+| 运行时配置 | `./data/settings.json` | 参数配置页修改的检索/切割参数 |
+
+**重启应用（`./deploy.sh restart`）不会丢失上述数据。** 以下操作会清空数据库：
+
+- `docker compose down -v`（删除命名卷）
+- 删除 Docker 卷 `deploy_kc_pgdata`
+
+角色权限保存在 PostgreSQL，应用启动时只会**首次**写入内置角色（superadmin/admin/user），**不会**覆盖你已在界面上修改过的角色。
 
 查看卷位置：`docker volume inspect deploy_kc_pgdata`
 
