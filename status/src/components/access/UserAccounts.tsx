@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import {
-  Table, Button, Space, Modal, Form, Input, Select, Switch, message, Popconfirm, Tag, Typography, Row, Col,
+  Table, Button, Space, Form, Input, Select, Switch, message, Popconfirm, Tag, Typography,
 } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, UserOutlined, LockOutlined } from '@ant-design/icons';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { defaultTablePagination } from '../../tablePagination';
+import AccessModal from './AccessModal';
+import RoleSelector from './RoleSelector';
 import PermissionGroupDisplay from './PermissionGroupDisplay';
 
 const { Text } = Typography;
@@ -25,21 +27,6 @@ interface RoleOption {
   label: string;
   description: string;
   permissions: string[];
-}
-
-function RolePreview({ role }: { role: RoleOption }) {
-  return (
-    <div className="kc-user-role-preview">
-      <div className="kc-user-role-preview-top">
-        <Text strong>{role.label}</Text>
-        <Text type="secondary" className="kc-user-role-preview-key">{role.key}</Text>
-      </div>
-      {role.description && (
-        <Text type="secondary" className="kc-user-role-preview-desc">{role.description}</Text>
-      )}
-      <PermissionGroupDisplay permissions={role.permissions} compact />
-    </div>
-  );
 }
 
 export default function UserAccounts() {
@@ -141,78 +128,77 @@ export default function UserAccounts() {
 
       <Table rowKey="id" loading={loading} dataSource={users} columns={cols} pagination={defaultTablePagination} />
 
-      <Modal
-        title={isCreate ? '新建用户' : `编辑 · ${editing.username}`}
+      <AccessModal
         open={modalOpen}
+        title={isCreate ? '新建用户' : `编辑用户 · ${editing?.username}`}
+        subtitle={isCreate ? '创建登录账号并分配角色，权限随角色自动生效' : '修改密码、角色或账号状态'}
         onCancel={() => setModalOpen(false)}
         onOk={onSave}
-        okText={isCreate ? '创建' : '保存'}
-        width={760}
-        destroyOnClose
-        className="kc-user-modal"
-        styles={{ body: { padding: '12px 20px 4px' } }}
+        okText={isCreate ? '创建用户' : '保存修改'}
+        width={isCreate ? 680 : 560}
       >
-        <Form form={form} layout="vertical" requiredMark={false} className="kc-user-form" size="middle">
+        <Form form={form} layout="vertical" requiredMark={false} className="kc-access-form" size="middle">
           {isCreate ? (
             <>
-              <Row gutter={16} align="top">
-                <Col span={8}>
+              <div className="kc-access-form__section">
+                <div className="kc-access-form__section-title">账号信息</div>
+                <div className="kc-access-form__row">
                   <Form.Item name="username" label="用户名" rules={[
                     { required: true, message: '必填' },
-                    { pattern: /^[a-zA-Z0-9_-]+$/, message: '格式不正确' },
+                    { pattern: /^[a-zA-Z0-9_-]+$/, message: '仅支持字母、数字、下划线和连字符' },
                   ]}>
                     <Input prefix={<UserOutlined />} placeholder="analyst_01" maxLength={64} />
                   </Form.Item>
-                </Col>
-                <Col span={8}>
                   <Form.Item name="password" label="初始密码" rules={[
                     { required: true, message: '必填' },
                     { min: 6, message: '至少 6 位' },
                   ]}>
                     <Input.Password prefix={<LockOutlined />} placeholder="至少 6 位" />
                   </Form.Item>
-                </Col>
-                <Col span={8}>
-                  <Form.Item name="role" label="角色" rules={[{ required: true, message: '必选' }]}>
-                    <Select
-                      placeholder="选择角色"
-                      optionLabelProp="label"
-                      options={roles.map(r => ({ value: r.key, label: r.label, desc: r.description }))}
-                      optionRender={(opt) => (
-                        <div className="kc-user-role-option">
-                          <span className="kc-user-role-option-label">{opt.label}</span>
-                          {opt.data.desc && <span className="kc-user-role-option-desc">{opt.data.desc as string}</span>}
-                        </div>
-                      )}
-                    />
-                  </Form.Item>
-                </Col>
-              </Row>
-              {selectedRole && <RolePreview role={selectedRole} />}
+                </div>
+              </div>
+
+              <div className="kc-access-form__section">
+                <div className="kc-access-form__section-title">分配角色</div>
+                <Form.Item name="role" rules={[{ required: true, message: '请选择角色' }]} className="kc-access-form__role-field">
+                  <RoleSelector roles={roles} />
+                </Form.Item>
+              </div>
             </>
           ) : (
-            <Row gutter={16} align="top">
-              <Col span={12}>
-                <Form.Item name="password" label="新密码" extra="留空不修改">
+            <>
+              <div className="kc-access-form__section">
+                <div className="kc-access-form__section-title">安全设置</div>
+                <Form.Item name="password" label="新密码" extra="留空则不修改密码">
                   <Input.Password prefix={<LockOutlined />} placeholder="留空不修改" />
                 </Form.Item>
                 <Form.Item name="role" label="角色" rules={[{ required: true }]}>
                   <Select
                     options={roles.map(r => ({ value: r.key, label: r.label }))}
-                    disabled={editing.id === currentUser?.id}
+                    disabled={editing?.id === currentUser?.id}
                   />
                 </Form.Item>
-                <Form.Item name="disabled" label="状态" valuePropName="checked">
-                  <Switch checkedChildren="禁用" unCheckedChildren="正常" disabled={editing.id === currentUser?.id} />
+                <Form.Item name="disabled" label="账号状态" valuePropName="checked">
+                  <Switch checkedChildren="禁用" unCheckedChildren="正常" disabled={editing?.id === currentUser?.id} />
                 </Form.Item>
-              </Col>
-              <Col span={12}>
-                {selectedRole && <RolePreview role={selectedRole} />}
-              </Col>
-            </Row>
+              </div>
+
+              {selectedRole && (
+                <div className="kc-access-form__section">
+                  <div className="kc-access-form__section-title">当前角色权限</div>
+                  <div className="kc-role-selector__preview">
+                    <div className="kc-role-selector__preview-head">
+                      <span className="kc-role-selector__preview-title">{selectedRole.label}</span>
+                      <span className="kc-role-selector__preview-count">{selectedRole.permissions.length} 项</span>
+                    </div>
+                    <PermissionGroupDisplay permissions={selectedRole.permissions} compact />
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </Form>
-      </Modal>
+      </AccessModal>
     </>
   );
 }
