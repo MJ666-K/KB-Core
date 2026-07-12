@@ -68,7 +68,7 @@ export const PRESET_ROLES: PresetRole[] = [
     description: '可管理知识库、智能体、模型与系统参数',
     isSystem: true,
     permissions: [
-      'dashboard:view', 'chat:use', 'documents:read', 'documents:write',
+      'dashboard:view', 'chat:use', 'kg:view', 'documents:read', 'documents:write',
       'agents:manage', 'models:manage', 'skills:manage', 'settings:manage',
     ],
   },
@@ -77,7 +77,7 @@ export const PRESET_ROLES: PresetRole[] = [
     label: '普通用户',
     description: '可使用法律助手，只读浏览文档',
     isSystem: true,
-    permissions: ['chat:use', 'documents:read'],
+    permissions: ['chat:use', 'kg:view', 'documents:read'],
   }
 ];
 

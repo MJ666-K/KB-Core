@@ -2,12 +2,16 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import type { AuthEnv } from '../auth/middleware';
+import { requirePermission } from '../auth/middleware';
 import { kgSearchNodesTool, kgGetNodeTool, kgNeighborsTool, kgPathTool, kgSubgraphTool, kgToChunkTool } from '../kg/tools';
 import { ingestKgData } from '../kg/ingest';
 import { logger } from '../utils/logger';
 import { config } from '../config';
 
-const app = new Hono();
+const app = new Hono<AuthEnv>();
+
+app.use('*', requirePermission('kg:view'));
 
 /** 统一包装：捕获 Neo4j 不可用等异常，返回结构化 JSON 而不是 Hono 默认的 "Internal Server Error" */
 function kgRoute(handler: () => Promise<Response>): Promise<Response> {
@@ -136,7 +140,7 @@ app.get('/stats', (c) => kgRoute(async () => {
 }));
 
 // ===== POST /kg/ingest =====
-app.post('/ingest', (c) => kgRoute(async () => {
+app.post('/ingest', requirePermission('settings:manage'), (c) => kgRoute(async () => {
   if (!config.kgEnabled) return c.json({ error: 'Knowledge graph is disabled' }, 503);
   const body = await c.req.json().catch(() => ({}));
   const parsed = z.object({
@@ -156,7 +160,7 @@ app.post('/ingest', (c) => kgRoute(async () => {
       await ingestKgData(parsed.data.filePath);
       return c.json({ ok: true, source: parsed.data.filePath });
     }
-    const defaultPath = path.resolve(process.cwd(), '../docs/kg-data.json');
+    const defaultPath = path.resolve(process.cwd(), './data/kg-data.json');
     try {
       await readFile(defaultPath, 'utf-8');
     } catch {

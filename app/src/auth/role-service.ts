@@ -2,9 +2,9 @@ import { eq, and, ne, isNull, asc, sql } from 'drizzle-orm';
 import { db } from '../db/client';
 import { roles, rolePermissions, users } from '../db/schema';
 import {
-  ALL_PERMISSIONS,
   isPermission,
   SUPERADMIN_ROLE_KEY,
+  SUPERADMIN_REQUIRED_PERMISSIONS,
   type Permission,
 } from './permission-registry';
 
@@ -59,7 +59,6 @@ async function loadCache(): Promise<void> {
 }
 
 export async function getPermissionsForRole(roleKey: string): Promise<Permission[]> {
-  if (roleKey === SUPERADMIN_ROLE_KEY) return [...ALL_PERMISSIONS];
   await loadCache();
   return permCache?.get(roleKey) ?? [];
 }
@@ -173,10 +172,16 @@ export async function updateRole(
   }
 
   if (input.permissions !== undefined) {
+    let perms = input.permissions.filter(isPermission);
+    if (existing.key === SUPERADMIN_ROLE_KEY) {
+      const merged = new Set(perms);
+      for (const p of SUPERADMIN_REQUIRED_PERMISSIONS) merged.add(p);
+      perms = [...merged];
+    }
     await db.delete(rolePermissions).where(eq(rolePermissions.roleId, id));
-    if (input.permissions.length > 0) {
+    if (perms.length > 0) {
       await db.insert(rolePermissions).values(
-        input.permissions.map(p => ({ roleId: id, permission: p })),
+        perms.map(p => ({ roleId: id, permission: p })),
       );
     }
   }

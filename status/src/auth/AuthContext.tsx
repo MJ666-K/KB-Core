@@ -14,6 +14,8 @@ interface AuthState {
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshIfNeeded: () => Promise<boolean>;
+  /** 从服务端重新拉取当前用户权限（角色权限变更后需调用） */
+  refreshProfile: () => Promise<boolean>;
   hasPermission: (permission: string) => boolean;
 }
 
@@ -82,29 +84,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return refreshingRef.current;
   }, []);
 
-  const validateSession = useCallback(async (): Promise<boolean> => {
-    let token = getAuthToken();
-    if (!token) {
-      clearAuthSession();
-      setUser(null);
-      return false;
-    }
-
-    if (getRefreshToken()) {
-      const refreshed = await refreshIfNeeded();
-      if (!refreshed) {
-        clearAuthSession();
-        setUser(null);
-        return false;
-      }
-      token = getAuthToken();
-    }
-
-    if (!token) {
-      clearAuthSession();
-      setUser(null);
-      return false;
-    }
+  const refreshProfile = useCallback(async (): Promise<boolean> => {
+    const token = getAuthToken();
+    if (!token) return false;
 
     try {
       const me = await authJson<{ user: StoredUser }>('/api/auth/me', {
@@ -118,15 +100,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       return true;
     } catch {
+      return false;
+    }
+  }, []);
+
+  const validateSession = useCallback(async (): Promise<boolean> => {
+    const token = getAuthToken();
+    if (!token) {
       clearAuthSession();
       setUser(null);
       return false;
     }
-  }, [refreshIfNeeded]);
+
+    if (await refreshProfile()) return true;
+
+    if (!getRefreshToken()) {
+      clearAuthSession();
+      setUser(null);
+      return false;
+    }
+
+    const refreshed = await refreshIfNeeded();
+    if (!refreshed) {
+      clearAuthSession();
+      setUser(null);
+      return false;
+    }
+    return true;
+  }, [refreshIfNeeded, refreshProfile]);
 
   useEffect(() => {
     void validateSession().finally(() => setLoading(false));
   }, [validateSession]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && getAuthToken()) {
+        void refreshProfile();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [refreshProfile]);
 
   const login = useCallback(async (username: string, password: string) => {
     const data = await authJson<{
@@ -165,8 +180,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     login,
     logout,
     refreshIfNeeded,
+    refreshProfile,
     hasPermission,
-  }), [user, loading, login, logout, refreshIfNeeded, hasPermission]);
+  }), [user, loading, login, logout, refreshIfNeeded, refreshProfile, hasPermission]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

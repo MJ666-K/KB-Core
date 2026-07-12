@@ -1,6 +1,7 @@
 export type Permission =
   | 'dashboard:view'
   | 'chat:use'
+  | 'kg:view'
   | 'documents:read'
   | 'documents:write'
   | 'agents:manage'
@@ -13,6 +14,7 @@ export type Permission =
 export const PERMISSION_LABELS: Record<Permission, string> = {
   'dashboard:view': '控制台',
   'chat:use': '法律助手',
+  'kg:view': '知识图谱',
   'documents:read': '文档浏览',
   'documents:write': '文档管理',
   'agents:manage': '智能体管理',
@@ -23,11 +25,11 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   'roles:manage': '角色管理',
 };
 
-export const PERMISSION_GROUPS: Array<{ title: string; permissions: Permission[] }> = [
-  { title: '基础', permissions: ['dashboard:view', 'chat:use'] },
-  { title: '文档', permissions: ['documents:read', 'documents:write'] },
-  { title: '配置', permissions: ['agents:manage', 'models:manage', 'skills:manage', 'settings:manage'] },
-  { title: '管理', permissions: ['users:manage', 'roles:manage'] },
+export const PERMISSION_GROUPS: Array<{ key: string; title: string; permissions: Permission[] }> = [
+  { key: 'basic', title: '基础功能', permissions: ['dashboard:view', 'chat:use', 'kg:view'] },
+  { key: 'docs', title: '文档', permissions: ['documents:read', 'documents:write'] },
+  { key: 'config', title: '系统配置', permissions: ['agents:manage', 'models:manage', 'skills:manage', 'settings:manage'] },
+  { key: 'admin', title: '权限管理', permissions: ['users:manage', 'roles:manage'] },
 ];
 
 export const MENU_PERMISSIONS: Record<string, Permission> = {
@@ -37,6 +39,7 @@ export const MENU_PERMISSIONS: Record<string, Permission> = {
   '/skills': 'skills:manage',
   '/documents': 'documents:read',
   '/chat': 'chat:use',
+  '/kg': 'kg:view',
   '/settings': 'settings:manage',
   '/users': 'users:manage',
 };
@@ -47,7 +50,6 @@ export function hasPermission(userPermissions: readonly string[] | undefined, pe
 }
 
 export function hasAnyPermission(userPermissions: readonly string[] | undefined, permissions: Permission[]): boolean {
-  // 空数组 = 不要求任何权限 → 视为开放
   if (!permissions || permissions.length === 0) return true;
   return permissions.some(p => hasPermission(userPermissions, p));
 }
@@ -59,9 +61,9 @@ export const ROUTE_ACCESS: Record<string, Permission[]> = {
   '/skills': ['skills:manage'],
   '/documents': ['documents:read'],
   '/chat': ['chat:use'],
+  '/kg': ['kg:view'],
   '/settings': ['settings:manage'],
   '/users': ['users:manage', 'roles:manage'],
-  '/kg': [],
 };
 
 export function canAccessPath(userPermissions: readonly string[] | undefined, path: string): boolean {

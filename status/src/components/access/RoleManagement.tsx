@@ -4,6 +4,7 @@ import {
 } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, LockOutlined, TeamOutlined } from '@ant-design/icons';
 import { api } from '../../api';
+import { useAuth } from '../../auth/AuthContext';
 import AccessModal from './AccessModal';
 import PermissionPicker, { type PermGroup } from './PermissionPicker';
 import PermissionGroupDisplay from './PermissionGroupDisplay';
@@ -20,7 +21,10 @@ interface RoleRow {
   userCount?: number;
 }
 
+const SUPERADMIN_LOCKED = ['users:manage', 'roles:manage'] as const;
+
 export default function RoleManagement() {
+  const { user, refreshProfile } = useAuth();
   const [roles, setRoles] = useState<RoleRow[]>([]);
   const [groups, setGroups] = useState<PermGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +48,7 @@ export default function RoleManagement() {
   const openCreate = () => {
     setEditing(null);
     form.resetFields();
-    form.setFieldsValue({ permissions: ['chat:use', 'documents:read'] });
+    form.setFieldsValue({ permissions: ['chat:use', 'kg:view', 'documents:read'] });
     setModalOpen(true);
   };
 
@@ -61,15 +65,24 @@ export default function RoleManagement() {
         ? api.updateRole(editing.id, { label: values.label, description: values.description, permissions: values.permissions })
         : api.createRole({ key: values.key, label: values.label, description: values.description, permissions: values.permissions });
       req
-        .then(() => { message.success(editing ? '已更新' : '已创建'); setModalOpen(false); load(); })
+        .then(async () => {
+          await load();
+          if (editing?.key === user?.role) {
+            await refreshProfile();
+          }
+          message.success(
+            editing?.key === user?.role
+              ? '已更新，当前账号权限已同步'
+              : '已更新。使用该角色的账号需刷新页面后权限才会生效',
+          );
+          setModalOpen(false);
+        })
         .catch(err => message.error(err instanceof Error ? err.message : '保存失败'));
     });
   };
 
-  if (loading) return <div className="kc-access-loading"><Spin /></div>;
-
   return (
-    <>
+    <Spin spinning={loading}>
       <div className="kc-access-toolbar">
         <Text type="secondary">自定义角色并配置权限，用户分配角色后自动生效</Text>
         <Space>
@@ -96,6 +109,7 @@ export default function RoleManagement() {
                 )}
               </div>
               <div className="kc-role-row-perms">
+                <span className="kc-role-row-perm-count">{role.permissions.length} 项权限</span>
                 <PermissionGroupDisplay permissions={role.permissions} />
               </div>
               <div className="kc-role-row-actions">
@@ -122,7 +136,7 @@ export default function RoleManagement() {
         onCancel={() => setModalOpen(false)}
         onOk={onSave}
         okText={editing ? '保存修改' : '创建角色'}
-        width={800}
+        width={880}
       >
         <Form form={form} layout="vertical" requiredMark={false} className="kc-access-form" size="middle">
           <div className="kc-access-form__section">
@@ -152,11 +166,14 @@ export default function RoleManagement() {
               rules={[{ required: true, type: 'array', min: 1, message: '至少选择一项权限' }]}
               className="kc-access-form__perm-field"
             >
-              <PermissionPicker groups={groups} />
+              <PermissionPicker
+                groups={groups}
+                locked={editing?.key === 'superadmin' ? [...SUPERADMIN_LOCKED] : undefined}
+              />
             </Form.Item>
           </div>
         </Form>
       </AccessModal>
-    </>
+    </Spin>
   );
 }

@@ -3085,6 +3085,23 @@ body {
   min-width: 0;
 }
 
+.kc-role-row-perm-count {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  color: var(--kc-text-tertiary);
+  background: var(--kc-bg-subtle);
+  padding: 0 6px;
+  border-radius: 10px;
+  line-height: 18px;
+  margin-bottom: 4px;
+}
+
+.kc-perm-display-empty {
+  font-size: 12px;
+  color: var(--kc-text-tertiary);
+}
+
 .kc-role-row-actions {
   display: flex;
   gap: 2px;
@@ -3092,13 +3109,38 @@ body {
 }
 
 /* 权限选择器 */
+.kc-perm-picker__toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.kc-perm-picker__search {
+  max-width: 100%;
+}
+
 .kc-perm-picker__summary {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
+  gap: 10px;
   font-size: 13px;
   color: var(--kc-text-secondary);
+}
+
+.kc-perm-picker__progress {
+  flex: 1;
+  margin: 0;
+  max-width: 160px;
+}
+
+.kc-perm-picker__empty {
+  padding: 24px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--kc-text-tertiary);
+  border: 1px dashed var(--kc-border-light);
+  border-radius: 8px;
 }
 
 .kc-perm-picker__summary strong {
@@ -3119,19 +3161,19 @@ body {
   overflow: hidden;
 }
 
-.kc-perm-picker__card--基础 {
+.kc-perm-picker__card--basic {
   border-top: 3px solid #1a56db;
 }
 
-.kc-perm-picker__card--文档 {
+.kc-perm-picker__card--docs {
   border-top: 3px solid #16a34a;
 }
 
-.kc-perm-picker__card--配置 {
+.kc-perm-picker__card--config {
   border-top: 3px solid #7c3aed;
 }
 
-.kc-perm-picker__card--管理 {
+.kc-perm-picker__card--admin {
   border-top: 3px solid #ea580c;
 }
 
@@ -3188,9 +3230,9 @@ body {
 
 .kc-perm-picker__item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
-  padding: 7px 10px;
+  padding: 8px 10px;
   border-radius: 6px;
   cursor: pointer;
   transition: background 0.12s;
@@ -3205,15 +3247,57 @@ body {
   background: var(--kc-primary-light);
 }
 
+.kc-perm-picker__item.is-locked {
+  opacity: 0.92;
+}
+
+.kc-perm-picker__item.is-locked .kc-perm-picker__item-key::after {
+  content: ' · 不可移除';
+  color: var(--kc-text-tertiary);
+  font-family: inherit;
+  background: none;
+  padding: 0;
+}
+
+.kc-access-form__alert {
+  margin-bottom: 10px;
+}
+
 .kc-perm-picker__item .ant-checkbox-wrapper {
   margin-inline-start: 0 !important;
   pointer-events: none;
 }
 
 .kc-perm-picker__item-label {
-  flex: 1;
+  display: block;
   font-size: 13px;
+  font-weight: 500;
   color: var(--kc-text);
+  line-height: 1.35;
+}
+
+.kc-perm-picker__item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.kc-perm-picker__item-desc {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--kc-text-tertiary);
+}
+
+.kc-perm-picker__item-key {
+  display: inline-block;
+  margin-top: 3px;
+  font-size: 10px;
+  color: var(--kc-text-tertiary);
+  background: var(--kc-bg-subtle);
+  padding: 0 5px;
+  border-radius: 3px;
+  line-height: 16px;
 }
 
 .kc-perm-picker__item-check {

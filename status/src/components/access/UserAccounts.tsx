@@ -30,7 +30,7 @@ interface RoleOption {
 }
 
 export default function UserAccounts() {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, refreshProfile } = useAuth();
   const [users, setUsers] = useState<UserRow[]>([]);
   const [roles, setRoles] = useState<RoleOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,7 +76,18 @@ export default function UserAccounts() {
         if (values.password) payload.password = values.password;
         if (values.role !== editing.role) payload.role = values.role;
         api.updateUser(editing.id, payload)
-          .then(() => { message.success('已更新'); setModalOpen(false); load(); })
+          .then(async () => {
+            if (editing.id === currentUser?.id) {
+              await refreshProfile();
+            }
+            message.success(
+              editing.id === currentUser?.id
+                ? '已更新，当前账号权限已同步'
+                : '已更新。该用户需刷新页面后权限才会生效',
+            );
+            setModalOpen(false);
+            load();
+          })
           .catch(err => message.error(err instanceof Error ? err.message : '更新失败'));
       } else {
         api.createUser({ username: values.username, password: values.password, role: values.role })

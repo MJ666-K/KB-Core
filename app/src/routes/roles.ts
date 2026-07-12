@@ -6,6 +6,7 @@ import {
   ALL_PERMISSIONS,
   PERMISSION_GROUPS,
   PERMISSION_LABELS,
+  PERMISSION_DESCRIPTIONS,
   isPermission,
 } from '../auth/permission-registry';
 import {
@@ -33,10 +34,19 @@ const updateSchema = z.object({
 
 app.get('/meta', requirePermission('roles:manage'), (c) => {
   return c.json({
-    permissions: ALL_PERMISSIONS.map(p => ({ key: p, label: PERMISSION_LABELS[p] })),
+    permissions: ALL_PERMISSIONS.map(p => ({
+      key: p,
+      label: PERMISSION_LABELS[p],
+      description: PERMISSION_DESCRIPTIONS[p],
+    })),
     groups: PERMISSION_GROUPS.map(g => ({
+      key: g.key,
       title: g.title,
-      permissions: g.permissions.map(p => ({ key: p, label: PERMISSION_LABELS[p] })),
+      permissions: g.permissions.map(p => ({
+        key: p,
+        label: PERMISSION_LABELS[p],
+        description: PERMISSION_DESCRIPTIONS[p],
+      })),
     })),
   });
 });

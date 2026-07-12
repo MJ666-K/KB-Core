@@ -170,8 +170,12 @@ export const api = {
     userCount?: number;
   }> }>),
   getRoleMeta: () => authFetch('/api/roles/meta').then(json<{
-    permissions: Array<{ key: string; label: string }>;
-    groups: Array<{ title: string; permissions: Array<{ key: string; label: string }> }>;
+    permissions: Array<{ key: string; label: string; description?: string }>;
+    groups: Array<{
+      key: string;
+      title: string;
+      permissions: Array<{ key: string; label: string; description?: string }>;
+    }>;
   }>),
   createRole: (data: { key: string; label: string; description?: string; permissions: string[] }) =>
     authFetch('/api/roles', { method: 'POST', headers, body: JSON.stringify(data) }).then(async r => {
