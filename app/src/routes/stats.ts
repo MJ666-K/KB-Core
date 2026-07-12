@@ -1,4 +1,6 @@
 import { Hono } from 'hono';
+import type { AuthEnv } from '../auth/middleware';
+import { requirePermission } from '../auth/middleware';
 import { db } from '../db/client';
 import {
   documents, chunks, datasets, queryLogs,
@@ -6,7 +8,8 @@ import {
 } from '../db/schema';
 import { sql, eq, and, isNull } from 'drizzle-orm';
 
-const app = new Hono();
+const app = new Hono<AuthEnv>();
+app.use('*', requirePermission('dashboard:view'));
 
 app.get('/', async (c) => {
   const [

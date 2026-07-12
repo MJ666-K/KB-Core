@@ -58,7 +58,7 @@ const ALL_MENU_ITEMS: Array<{
   { key: '/agents', icon: <RobotOutlined />, label: '智能体', title: '智能体', subtitle: '路由子智能体与领域专家配置', permissions: [MENU_PERMISSIONS['/agents']] },
   { key: '/models', icon: <ApiOutlined />, label: '模型', title: '模型', subtitle: 'LLM 模型与推理参数管理', permissions: [MENU_PERMISSIONS['/models']] },
   { key: '/skills', icon: <ToolOutlined />, label: 'Skills', title: 'Skills', subtitle: 'Agent 高级任务单元', permissions: [MENU_PERMISSIONS['/skills']] },
-  { key: '/documents', icon: <FileTextOutlined />, label: '文档库', title: '文档库', subtitle: '上传 · 刷新 · 重新嵌入 · 删除', permissions: [MENU_PERMISSIONS['/documents'], 'documents:write'] },
+  { key: '/documents', icon: <FileTextOutlined />, label: '文档库', title: '文档库', subtitle: '上传 · 刷新 · 重新嵌入 · 删除', permissions: [MENU_PERMISSIONS['/documents']] },
   { key: '/chat', icon: <MessageOutlined />, label: '法律助手', title: '法律助手', subtitle: CHAT_SUBTITLE, permissions: [MENU_PERMISSIONS['/chat']] },
   { key: '/users', icon: <TeamOutlined />, label: '访问控制', title: '访问控制', subtitle: '用户账号 · 角色 · 权限', permissions: ['users:manage', 'roles:manage'] },
   { key: '/kg', icon: <PartitionOutlined />, label: '知识图谱', title: '知识图谱', subtitle: '图谱可视化与导航', permissions: [MENU_PERMISSIONS['/kg']] },

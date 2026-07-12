@@ -32,12 +32,13 @@ CMD="${1:-up}"
 case "$CMD" in
   up)
     echo "🚀 启动服务（镜像: $IMAGE）..."
-    docker compose -f "$COMPOSE_FILE" up -d
+    KC_IMAGE="$IMAGE" docker compose -f "$COMPOSE_FILE" up -d
     echo ""
     echo "✅ 部署完成"
     echo "   访问: http://localhost:${APP_PORT:-3000}"
     echo "   健康: http://localhost:${APP_PORT:-3000}/health"
     echo "   日志: ./deploy.sh logs"
+    echo "   Neo4j: ./deploy.sh logs-neo4j"
     ;;
   down)
     docker compose -f "$COMPOSE_FILE" down
@@ -49,10 +50,25 @@ case "$CMD" in
     docker compose -f "$COMPOSE_FILE" ps
     ;;
   restart)
-    docker compose -f "$COMPOSE_FILE" restart app
+    echo "🔄 重启应用..."
+    KC_IMAGE="$IMAGE" docker compose -f "$COMPOSE_FILE" up -d --force-recreate app
+    ;;
+  logs-neo4j)
+    docker compose -f "$COMPOSE_FILE" logs -f neo4j
+    ;;
+  neo4j-reset)
+    echo "⚠️  将删除 Neo4j 数据卷（图谱数据会清空）"
+    read -r -p "确认输入 yes: " confirm
+    if [[ "$confirm" != "yes" ]]; then
+      echo "已取消"
+      exit 1
+    fi
+    docker compose -f "$COMPOSE_FILE" down
+    docker volume ls -q | grep kc_neo4jdata | xargs -r docker volume rm
+    echo "✅ Neo4j 卷已删除，请重新: ./deploy.sh up"
     ;;
   *)
-    echo "用法: $0 {up|down|logs|ps|restart}"
+    echo "用法: $0 {up|down|logs|logs-neo4j|ps|restart|neo4j-reset}"
     exit 1
     ;;
 esac

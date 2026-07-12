@@ -4,6 +4,8 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined } from '@ant
 import { api } from '../api';
 import type { Skill } from '../types';
 import { defaultTablePagination } from '../tablePagination';
+import { useAuth } from '../auth/AuthContext';
+import { canManageSkills } from '../auth/permissions';
 
 interface ToolOption {
   name: string;
@@ -11,6 +13,8 @@ interface ToolOption {
 }
 
 export default function Skills() {
+  const { user } = useAuth();
+  const canManage = canManageSkills(user?.permissions);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [toolOptions, setToolOptions] = useState<ToolOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,10 +70,14 @@ export default function Skills() {
       title: '操作', key: 'action', width: 160,
       render: (_: unknown, r: Skill) => (
         <Space>
-          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => onEdit(r)}>编辑</Button>
-          <Popconfirm title="确认删除该 Skill？" onConfirm={() => onDel(r.id)} okText="删除" cancelText="取消" okButtonProps={{ danger: true }}>
-            <Button type="link" danger size="small" icon={<DeleteOutlined />}>删除</Button>
-          </Popconfirm>
+          {canManage && (
+            <>
+              <Button type="link" size="small" icon={<EditOutlined />} onClick={() => onEdit(r)}>编辑</Button>
+              <Popconfirm title="确认删除该 Skill？" onConfirm={() => onDel(r.id)} okText="删除" cancelText="取消" okButtonProps={{ danger: true }}>
+                <Button type="link" danger size="small" icon={<DeleteOutlined />}>删除</Button>
+              </Popconfirm>
+            </>
+          )}
         </Space>
       ),
     },
@@ -90,7 +98,9 @@ export default function Skills() {
     <div>
       <Card bordered={false}>
         <div className="kc-toolbar">
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => onEdit(null)}>新建 Skill</Button>
+          {canManage && (
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => onEdit(null)}>新建 Skill</Button>
+          )}
           <Button icon={<ReloadOutlined />} onClick={load}>刷新</Button>
         </div>
         <Table

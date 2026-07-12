@@ -1,4 +1,6 @@
 import { Hono } from 'hono';
+import type { AuthEnv } from '../auth/middleware';
+import { requirePermission } from '../auth/middleware';
 import { searchKnowledgeTool } from '../tools/search-knowledge';
 import { getDocumentTool } from '../tools/get-document';
 import { getChunkTool } from '../tools/get-chunk';
@@ -16,7 +18,8 @@ export const SKILL_TOOL_OPTIONS = [
   callAgentTool,
 ].map(t => ({ name: t.name, description: t.description }));
 
-const app = new Hono();
+const app = new Hono<AuthEnv>();
+app.use('*', requirePermission('skills:manage'));
 
 app.get('/tool-options', (c) => {
   return c.json({ tools: SKILL_TOOL_OPTIONS });

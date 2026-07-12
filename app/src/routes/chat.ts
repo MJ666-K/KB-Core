@@ -1,9 +1,12 @@
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
+import type { AuthEnv } from '../auth/middleware';
+import { requirePermission } from '../auth/middleware';
 import { getAgent } from '../agent/registry';
 import type { QueryOptions } from '../agent/types';
 
-const app = new Hono();
+const app = new Hono<AuthEnv>();
+app.use('*', requirePermission('chat:use'));
 
 interface ChatRequest {
   question: string;

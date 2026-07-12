@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { authMiddleware, type AuthEnv } from '../auth/middleware';
+import { authMiddleware, requirePermission, type AuthEnv } from '../auth/middleware';
 import agentsRouter from './agents';
 import skillsRouter from './skills';
 import documentsRouter from './documents';
@@ -38,7 +38,7 @@ export function mountApiRoutes(app: Hono): void {
   api.route('/roles', rolesRouter);
   api.route('/kg', kgRouter);
 
-  api.post('/reload', async (c) => {
+  api.post('/reload', requirePermission('agents:manage'), async (c) => {
     try {
       await getSubAgentRegistry().reload();
       return c.json({ ok: true });

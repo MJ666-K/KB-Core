@@ -1,4 +1,6 @@
 import { Hono } from 'hono';
+import type { AuthEnv } from '../auth/middleware';
+import { requirePermission } from '../auth/middleware';
 import { z } from 'zod';
 import { nanoid } from 'nanoid';
 import { extname } from 'path';
@@ -10,7 +12,7 @@ import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import { logger } from '../utils/logger';
 import { config } from '../config';
 
-const app = new Hono();
+const app = new Hono<AuthEnv>();
 
 const ALLOWED_EXTENSIONS = new Set(['.txt', '.md']);
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
@@ -20,7 +22,7 @@ const datasetNameSchema = z.string().min(1).max(100).regex(
   'Dataset name can only contain letters, numbers, Chinese, hyphens and underscores',
 );
 
-app.post('/ingest', async (c) => {
+app.post('/ingest', requirePermission('documents:write'), async (c) => {
   const formData = await c.req.formData();
   const file = formData.get('file');
   const datasetRaw = formData.get('dataset') ?? formData.get('datasetId') ?? 'default';

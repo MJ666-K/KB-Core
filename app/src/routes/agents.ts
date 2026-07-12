@@ -1,11 +1,14 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import type { AuthEnv } from '../auth/middleware';
+import { requirePermission } from '../auth/middleware';
 import { db } from '../db/client';
 import { agents, models } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { getSubAgentRegistry } from '../agent/sub-agent-registry';
 
-const app = new Hono();
+const app = new Hono<AuthEnv>();
+app.use('*', requirePermission('agents:manage'));
 
 const agentSchema = z.object({
   name: z.string().min(1).max(50).regex(/^[a-z0-9_-]+$/),

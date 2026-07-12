@@ -81,3 +81,23 @@ export function canManageUsers(userPermissions: readonly string[] | undefined): 
 export function canManageRoles(userPermissions: readonly string[] | undefined): boolean {
   return hasPermission(userPermissions, 'roles:manage');
 }
+
+export function canWriteDocuments(userPermissions: readonly string[] | undefined): boolean {
+  return hasPermission(userPermissions, 'documents:write');
+}
+
+export function canManageAgents(userPermissions: readonly string[] | undefined): boolean {
+  return hasPermission(userPermissions, 'agents:manage');
+}
+
+export function canManageModels(userPermissions: readonly string[] | undefined): boolean {
+  return hasPermission(userPermissions, 'models:manage');
+}
+
+export function canManageSkills(userPermissions: readonly string[] | undefined): boolean {
+  return hasPermission(userPermissions, 'skills:manage');
+}
+
+export function canManageSettings(userPermissions: readonly string[] | undefined): boolean {
+  return hasPermission(userPermissions, 'settings:manage');
+}

@@ -5,8 +5,12 @@ import { api } from '../api';
 import type { Agent, Dataset } from '../types';
 import { datasetDisplayName } from '../datasetLabels';
 import { defaultTablePagination } from '../tablePagination';
+import { useAuth } from '../auth/AuthContext';
+import { canManageAgents } from '../auth/permissions';
 
 export default function Agents() {
+  const { user } = useAuth();
+  const canManage = canManageAgents(user?.permissions);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [models, setModels] = useState<any[]>([]);
@@ -82,10 +86,14 @@ export default function Agents() {
       title: '操作', key: 'action', width: 160,
       render: (_: unknown, r: Agent) => (
         <Space>
-          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => onEdit(r)}>编辑</Button>
-          <Popconfirm title="确认删除该智能体？" onConfirm={() => onDel(r.id)} okText="删除" cancelText="取消" okButtonProps={{ danger: true }}>
-            <Button type="link" danger size="small" icon={<DeleteOutlined />}>删除</Button>
-          </Popconfirm>
+          {canManage && (
+            <>
+              <Button type="link" size="small" icon={<EditOutlined />} onClick={() => onEdit(r)}>编辑</Button>
+              <Popconfirm title="确认删除该智能体？" onConfirm={() => onDel(r.id)} okText="删除" cancelText="取消" okButtonProps={{ danger: true }}>
+                <Button type="link" danger size="small" icon={<DeleteOutlined />}>删除</Button>
+              </Popconfirm>
+            </>
+          )}
         </Space>
       ),
     },
@@ -95,7 +103,9 @@ export default function Agents() {
     <div>
       <Card bordered={false}>
         <div className="kc-toolbar">
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => onEdit(null)}>新建 Agent</Button>
+          {canManage && (
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => onEdit(null)}>新建 Agent</Button>
+          )}
           <Button icon={<ReloadOutlined />} onClick={load}>刷新</Button>
           <Input placeholder="搜索标识 / 显示名..." prefix={<SearchOutlined />} value={search} onChange={e => setSearch(e.target.value)} allowClear style={{ width: 240, marginLeft: 'auto' }} />
         </div>

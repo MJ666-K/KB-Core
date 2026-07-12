@@ -4,8 +4,12 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined } from '@ant
 import { api } from '../api';
 import type { Model } from '../types';
 import { defaultTablePagination } from '../tablePagination';
+import { useAuth } from '../auth/AuthContext';
+import { canManageModels } from '../auth/permissions';
 
 export default function Models() {
+  const { user } = useAuth();
+  const canManage = canManageModels(user?.permissions);
   const [models, setModels] = useState<Model[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -55,10 +59,14 @@ export default function Models() {
       title: '操作', key: 'action', width: 160,
       render: (_: unknown, r: Model) => (
         <Space>
-          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => onEdit(r)}>编辑</Button>
-          <Popconfirm title="确认删除该模型？" description="请先确保没有智能体使用该模型" onConfirm={() => onDel(r.id)} okText="删除" cancelText="取消" okButtonProps={{ danger: true }}>
-            <Button type="link" danger size="small" icon={<DeleteOutlined />}>删除</Button>
-          </Popconfirm>
+          {canManage && (
+            <>
+              <Button type="link" size="small" icon={<EditOutlined />} onClick={() => onEdit(r)}>编辑</Button>
+              <Popconfirm title="确认删除该模型？" description="请先确保没有智能体使用该模型" onConfirm={() => onDel(r.id)} okText="删除" cancelText="取消" okButtonProps={{ danger: true }}>
+                <Button type="link" danger size="small" icon={<DeleteOutlined />}>删除</Button>
+              </Popconfirm>
+            </>
+          )}
         </Space>
       ),
     },
@@ -68,7 +76,9 @@ export default function Models() {
     <div>
       <Card bordered={false}>
         <div className="kc-toolbar">
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => onEdit(null)}>新增模型</Button>
+          {canManage && (
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => onEdit(null)}>新增模型</Button>
+          )}
           <Button icon={<ReloadOutlined />} onClick={load}>刷新</Button>
         </div>
         <Table dataSource={models} columns={cols} loading={loading} rowKey="id" size="middle" pagination={defaultTablePagination} />

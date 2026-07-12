@@ -14,6 +14,8 @@ import { api } from '../api';
 import type { Dataset } from '../types';
 import { datasetDisplayName } from '../datasetLabels';
 import { documentsTablePagination } from '../tablePagination';
+import { useAuth } from '../auth/AuthContext';
+import { canWriteDocuments } from '../auth/permissions';
 
 interface Document {
   id: string;
@@ -63,6 +65,8 @@ function fileKey(file: File): string {
 
 export default function Documents() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const canWrite = canWriteDocuments(user?.permissions);
   const [docs, setDocs] = useState<Document[]>([]);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [loading, setLoading] = useState(true);
@@ -283,9 +287,11 @@ export default function Documents() {
       render: (_: unknown, r: Document) => (
         <Space>
           <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => navigate(`/documents/${r.id}`)}>查看</Button>
-          <Popconfirm title="确认删除？" onConfirm={() => { api.deleteDocument(r.id).then(() => { message.success('已删除'); load(); }).catch(() => message.error('失败')); }}>
-            <Button type="link" danger size="small" icon={<DeleteOutlined />}>删除</Button>
-          </Popconfirm>
+          {canWrite && (
+            <Popconfirm title="确认删除？" onConfirm={() => { api.deleteDocument(r.id).then(() => { message.success('已删除'); load(); }).catch(() => message.error('失败')); }}>
+              <Button type="link" danger size="small" icon={<DeleteOutlined />}>删除</Button>
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -297,30 +303,36 @@ export default function Documents() {
     <div>
       <Card bordered={false}>
         <div className="kc-toolbar">
-          <Button type="primary" icon={<UploadOutlined />} onClick={openUploadModal}>上传文档</Button>
+          {canWrite && (
+            <Button type="primary" icon={<UploadOutlined />} onClick={openUploadModal}>上传文档</Button>
+          )}
           <Button icon={<ReloadOutlined />} onClick={load}>刷新</Button>
-          <Button
-            icon={<ReloadOutlined />}
-            disabled={selectedKeys.length === 0}
-            onClick={() => {
-              if (selectedKeys.length === 0) { message.warning('请先选择文档'); return; }
-              onBatchReingest();
-            }}
-          >
-            重新嵌入{selectedKeys.length > 0 ? ` (${selectedKeys.length})` : ''}
-          </Button>
-          <Popconfirm
-            title={`确认删除 ${selectedKeys.length} 个文档？`}
-            onConfirm={onBatchDelete}
-            okText="确认删除"
-            cancelText="取消"
-            okButtonProps={{ danger: true }}
-          >
-            <Button danger icon={<DeleteOutlined />} disabled={selectedKeys.length === 0}>
-              删除{selectedKeys.length > 0 ? ` (${selectedKeys.length})` : ''}
-            </Button>
-          </Popconfirm>
-          {selectedKeys.length > 0 && (
+          {canWrite && (
+            <>
+              <Button
+                icon={<ReloadOutlined />}
+                disabled={selectedKeys.length === 0}
+                onClick={() => {
+                  if (selectedKeys.length === 0) { message.warning('请先选择文档'); return; }
+                  onBatchReingest();
+                }}
+              >
+                重新嵌入{selectedKeys.length > 0 ? ` (${selectedKeys.length})` : ''}
+              </Button>
+              <Popconfirm
+                title={`确认删除 ${selectedKeys.length} 个文档？`}
+                onConfirm={onBatchDelete}
+                okText="确认删除"
+                cancelText="取消"
+                okButtonProps={{ danger: true }}
+              >
+                <Button danger icon={<DeleteOutlined />} disabled={selectedKeys.length === 0}>
+                  删除{selectedKeys.length > 0 ? ` (${selectedKeys.length})` : ''}
+                </Button>
+              </Popconfirm>
+            </>
+          )}
+          {canWrite && selectedKeys.length > 0 && (
             <Button type="link" onClick={() => setSelectedKeys([])}>取消选择</Button>
           )}
           <Input placeholder="搜索文档标题..." prefix={<SearchOutlined />} value={search} onChange={e => setSearch(e.target.value)} allowClear style={{ width: 240, marginLeft: 'auto' }} />
@@ -332,7 +344,7 @@ export default function Documents() {
           rowKey="id"
           size="middle"
           pagination={documentsTablePagination}
-          rowSelection={{ selectedRowKeys: selectedKeys, onChange: keys => setSelectedKeys(keys as string[]) }}
+          rowSelection={canWrite ? { selectedRowKeys: selectedKeys, onChange: keys => setSelectedKeys(keys as string[]) } : undefined}
         />
       </Card>
 

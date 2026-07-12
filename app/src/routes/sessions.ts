@@ -6,9 +6,10 @@ import { asc, desc, eq, sql, and } from 'drizzle-orm';
 import type { Citation } from '../db/schema/query-log';
 import type { ChatMessageMeta } from '../db/schema/chat-session';
 import type { AuthEnv } from '../auth/middleware';
-import { getAuthUser } from '../auth/middleware';
+import { getAuthUser, requirePermission } from '../auth/middleware';
 
 const app = new Hono<AuthEnv>();
+app.use('*', requirePermission('chat:use'));
 
 const SESSION_TITLE_MAX = 18;
 

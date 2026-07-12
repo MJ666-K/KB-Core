@@ -50,3 +50,14 @@ export function requirePermission(permission: Permission) {
     await next();
   };
 }
+
+/** 满足任一权限即可通过 */
+export function requireAnyPermission(...permissions: Permission[]) {
+  return async (c: Context<AuthEnv>, next: Next): Promise<Response | void> => {
+    const user = getAuthUser(c);
+    if (!permissions.some(p => hasPermission(user.permissions, p))) {
+      return c.json({ error: 'Forbidden', detail: '权限不足' }, 403);
+    }
+    await next();
+  };
+}

@@ -4,6 +4,7 @@ import { config } from './config';
 import { initRuntimeSettings } from './settings/store';
 import { runMigrations } from './db/migrate';
 import { runBaseSeed } from './db/seed/run';
+import { seedKgIfEmpty } from './kg/seed';
 import { logger } from './utils/logger';
 
 import ingestRoutes from './routes/ingest';
@@ -34,6 +35,7 @@ app.route('/', ingestRoutes);
 async function main(): Promise<void> {
   await runMigrations();
   await runBaseSeed();
+  await seedKgIfEmpty();
   await connectRedis();
   await initRuntimeSettings();
 

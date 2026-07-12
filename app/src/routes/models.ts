@@ -1,10 +1,15 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import type { AuthEnv } from '../auth/middleware';
+import { requireAnyPermission, requirePermission } from '../auth/middleware';
 import { db } from '../db/client';
 import { models } from '../db/schema';
 import { eq } from 'drizzle-orm';
 
-const app = new Hono();
+const app = new Hono<AuthEnv>();
+
+const canReadModels = requireAnyPermission('models:manage', 'agents:manage');
+const canManageModels = requirePermission('models:manage');
 
 const modelSchema = z.object({
   name: z.string().min(1).max(100).regex(/^[a-z0-9_-]+$/),
@@ -22,7 +27,7 @@ const modelSchema = z.object({
   presencePenalty: z.number().min(-2).max(2).nullable().optional().default(0),
 });
 
-app.get('/', async (c) => {
+app.get('/', canReadModels, async (c) => {
   const onlyEnabled = c.req.query('enabled') === 'true';
   const query = onlyEnabled
     ? db.select().from(models).where(eq(models.enabled, true))
@@ -31,8 +36,10 @@ app.get('/', async (c) => {
   return c.json({ models: rows });
 });
 
-app.get('/:key', async (c) => {
-  const key = c.req.param('key');
+app.get('/:key', canReadModels, async (c) => {
+  const keyParam = c.req.param('key');
+  if (!keyParam) return c.json({ error: 'Invalid key' }, 400);
+  const key: string = keyParam;
   let row = await db.select().from(models).where(eq(models.name, key)).limit(1);
   if (row.length === 0) {
     row = await db.select().from(models).where(eq(models.id, key)).limit(1);
@@ -41,7 +48,7 @@ app.get('/:key', async (c) => {
   return c.json({ model: row[0] });
 });
 
-app.post('/', async (c) => {
+app.post('/', canManageModels, async (c) => {
   const body = await c.req.json();
   const parsed = modelSchema.safeParse(body);
   if (!parsed.success) return c.json({ error: 'Validation failed', detail: parsed.error.issues }, 400);
@@ -58,8 +65,10 @@ app.post('/', async (c) => {
   }
 });
 
-app.put('/:key', async (c) => {
-  const key = c.req.param('key');
+app.put('/:key', canManageModels, async (c) => {
+  const keyParam = c.req.param('key');
+  if (!keyParam) return c.json({ error: 'Invalid key' }, 400);
+  const key: string = keyParam;
   const body = await c.req.json();
   const parsed = modelSchema.partial().safeParse(body);
   if (!parsed.success) return c.json({ error: 'Validation failed', detail: parsed.error.issues }, 400);
@@ -73,8 +82,10 @@ app.put('/:key', async (c) => {
   return c.json({ model: updated[0] });
 });
 
-app.delete('/:key', async (c) => {
-  const key = c.req.param('key');
+app.delete('/:key', canManageModels, async (c) => {
+  const keyParam = c.req.param('key');
+  if (!keyParam) return c.json({ error: 'Invalid key' }, 400);
+  const key: string = keyParam;
   const deleted = await db.delete(models).where(eq(models.name, key)).returning({ id: models.id });
   if (deleted.length === 0) return c.json({ error: 'Model not found' }, 404);
   return c.json({ ok: true });

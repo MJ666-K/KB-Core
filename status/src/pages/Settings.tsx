@@ -8,6 +8,8 @@ import {
   DownOutlined, ApiOutlined,
 } from '@ant-design/icons';
 import { api } from '../api';
+import { useAuth } from '../auth/AuthContext';
+import { canManageSettings } from '../auth/permissions';
 
 interface ChunkSettings {
   parentTokens: number;
@@ -358,6 +360,8 @@ function QueryTab({
 }
 
 export default function Settings() {
+  const { user } = useAuth();
+  const canManage = canManageSettings(user?.permissions);
   const [chunkForm] = Form.useForm<ChunkSettings>();
   const [queryForm] = Form.useForm<QuerySettings>();
   const chunkWatched = Form.useWatch([], chunkForm) as Partial<ChunkSettings> | undefined;
@@ -433,9 +437,11 @@ export default function Settings() {
             <Button icon={<ReloadOutlined />} onClick={load} loading={refreshing} disabled={initialLoading || saving}>
               重新加载
             </Button>
-            <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save} disabled={initialLoading}>
-              保存
-            </Button>
+            {canManage && (
+              <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save} disabled={initialLoading}>
+                保存
+              </Button>
+            )}
           </Space>
         </div>
 

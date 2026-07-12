@@ -1,9 +1,10 @@
 import { Hono } from 'hono';
 import { getQueryJob, getActiveJobForSession } from '../auth/query-job-store';
 import type { AuthEnv } from '../auth/middleware';
-import { getAuthUser } from '../auth/middleware';
+import { getAuthUser, requirePermission } from '../auth/middleware';
 
 const app = new Hono<AuthEnv>();
+app.use('*', requirePermission('chat:use'));
 
 app.get('/jobs/:jobId', async (c) => {
   const user = getAuthUser(c);

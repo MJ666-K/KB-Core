@@ -1,4 +1,6 @@
 import { Hono } from 'hono';
+import type { AuthEnv } from '../auth/middleware';
+import { requirePermission } from '../auth/middleware';
 import { db } from '../db/client';
 import { documents, chunks, datasets as datasetsSchema } from '../db/schema';
 import { eq, and, isNull, desc, sql, inArray } from 'drizzle-orm';
@@ -7,9 +9,9 @@ import { normalizeDocumentContent } from '../utils/text-normalize';
 import { resetDocumentForReingest, enqueueIngest } from '../pipeline/document-reset';
 import { logger } from '../utils/logger';
 
-const app = new Hono();
+const app = new Hono<AuthEnv>();
 
-app.get('/', async (c) => {
+app.get('/', requirePermission('documents:read'), async (c) => {
   const datasetId = c.req.query('datasetId');
   const status = c.req.query('status');
   const search = c.req.query('search');
@@ -49,8 +51,9 @@ app.get('/', async (c) => {
   return c.json({ documents: enriched });
 });
 
-app.get('/:id', async (c) => {
+app.get('/:id', requirePermission('documents:read'), async (c) => {
   const id = c.req.param('id');
+  if (!id) return c.json({ error: 'Invalid id' }, 400);
   const rows = await db.select({
     id: documents.id, title: documents.title, docType: documents.docType,
     status: documents.status, fileSize: documents.fileSize, fileHash: documents.fileHash,
@@ -63,8 +66,9 @@ app.get('/:id', async (c) => {
   return c.json({ document: rows[0] });
 });
 
-app.get('/:id/content', async (c) => {
+app.get('/:id/content', requirePermission('documents:read'), async (c) => {
   const id = c.req.param('id');
+  if (!id) return c.json({ error: 'Invalid id' }, 400);
   const [doc] = await db.select({ sourcePath: documents.sourcePath, title: documents.title })
     .from(documents).where(eq(documents.id, id));
   if (!doc) return c.json({ error: 'Document not found' }, 404);
@@ -77,8 +81,9 @@ app.get('/:id/content', async (c) => {
   }
 });
 
-app.get('/:id/chunks', async (c) => {
+app.get('/:id/chunks', requirePermission('documents:read'), async (c) => {
   const id = c.req.param('id');
+  if (!id) return c.json({ error: 'Invalid id' }, 400);
   const rows = await db.select({
     id: chunks.id,
     parentId: chunks.parentId,
@@ -97,8 +102,9 @@ app.get('/:id/chunks', async (c) => {
   return c.json({ chunks: rows });
 });
 
-app.delete('/:id', async (c) => {
+app.delete('/:id', requirePermission('documents:write'), async (c) => {
   const id = c.req.param('id');
+  if (!id) return c.json({ error: 'Invalid id' }, 400);
   const [updated] = await db.update(documents)
     .set({ deletedAt: new Date(), updatedAt: new Date() })
     .where(eq(documents.id, id))
@@ -108,8 +114,9 @@ app.delete('/:id', async (c) => {
   return c.json({ ok: true });
 });
 
-app.post('/:id/reingest', async (c) => {
+app.post('/:id/reingest', requirePermission('documents:write'), async (c) => {
   const id = c.req.param('id');
+  if (!id) return c.json({ error: 'Invalid id' }, 400);
   const [doc] = await db.select({ sourcePath: documents.sourcePath, datasetId: documents.datasetId })
     .from(documents).where(and(eq(documents.id, id), isNull(documents.deletedAt)));
   if (!doc) return c.json({ error: 'Document not found' }, 404);

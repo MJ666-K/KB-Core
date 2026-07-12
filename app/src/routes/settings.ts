@@ -1,8 +1,11 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import type { AuthEnv } from '../auth/middleware';
+import { requirePermission } from '../auth/middleware';
 import { defaultRuntimeSettings, loadRuntimeSettings, runtimeSettingsSchema, saveRuntimeSettings } from '../settings/store';
 
-const app = new Hono();
+const app = new Hono<AuthEnv>();
+app.use('*', requirePermission('settings:manage'));
 
 const patchSchema = z.object({
   chunk: runtimeSettingsSchema.shape.chunk.partial().optional(),

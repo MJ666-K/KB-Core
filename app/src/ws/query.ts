@@ -9,6 +9,7 @@ import type { EventStream } from '../agent/types';
 import { logger } from '../utils/logger';
 import { getLastRetrievalDetails } from '../tools/search-knowledge';
 import { resolveBearerToken } from '../auth/service';
+import { hasPermission } from '../auth/permission-registry';
 import {
   createQueryJob,
   appendQueryJobEvent,
@@ -98,6 +99,11 @@ export const queryWebSocket = {
       const user = await resolveBearerToken(parsed.data.token);
       if (!user) {
         send(ws, { type: 'error', error: 'Unauthorized' });
+        ws.close();
+        return;
+      }
+      if (!hasPermission(user.permissions, 'chat:use')) {
+        send(ws, { type: 'error', error: 'Forbidden', detail: '权限不足' });
         ws.close();
         return;
       }
