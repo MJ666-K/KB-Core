@@ -26,9 +26,11 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@duckdb/node-api": "^1.5.4-r.1",
     "ali-oss": "^6.23.0",
     "bullmq": "^5.79.2",
     "drizzle-orm": "^0.45.2",
+    "duckdb": "^1.4.4",
     "hono": "^4.12.27",
     "ioredis": "^5.11.1",
     "marked": "^18.0.5",
@@ -36,6 +38,7 @@
     "nanoid": "^5.1.16",
     "neo4j-driver": "^6.2.0",
     "pg": "^8.22.0",
+    "xlsx": "^0.18.5",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"
   }

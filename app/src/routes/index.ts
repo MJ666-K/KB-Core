@@ -15,6 +15,7 @@ import kgRouter from './kg';
 import queryJobsRouter from './query-jobs';
 import usersRouter from './users';
 import rolesRouter from './roles';
+import excelRouter from './excel';
 import { getSubAgentRegistry } from '../agent/sub-agent-registry';
 
 export function mountApiRoutes(app: Hono): void {
@@ -37,6 +38,7 @@ export function mountApiRoutes(app: Hono): void {
   api.route('/users', usersRouter);
   api.route('/roles', rolesRouter);
   api.route('/kg', kgRouter);
+  api.route('/excel', excelRouter);
 
   api.post('/reload', requirePermission('agents:manage'), async (c) => {
     try {

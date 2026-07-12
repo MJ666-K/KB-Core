@@ -730,6 +730,32 @@ body {
   flex: 1;
 }
 
+/* ===== Excel 分析页 ===== */
+.kc-page-content-excel {
+  padding: 10px 16px 14px !important;
+  height: calc(100vh - 60px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  background: var(--kc-bg-page);
+}
+
+.kc-page-inner-excel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.kc-page-inner-excel > * {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
 .kc-page-inner-chat > * {
   flex: 1;
   min-height: 0;

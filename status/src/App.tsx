@@ -16,6 +16,7 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   PartitionOutlined,
+  DatabaseOutlined,
 } from '@ant-design/icons';
 import Dashboard from './pages/Dashboard';
 import Agents from './pages/Agents';
@@ -28,6 +29,7 @@ import Settings from './pages/Settings';
 import KnowledgeGraph from './pages/KnowledgeGraph';
 import Users from './pages/Users';
 import Login from './pages/Login';
+import ExcelAnalysis from './pages/ExcelAnalysis';
 import { ProtectedRoute } from './auth/ProtectedRoute';
 import { useAuth, isAuthenticatedSession } from './auth/AuthContext';
 import { CHAT_SUBTITLE } from './chatHints';
@@ -60,6 +62,7 @@ const ALL_MENU_ITEMS: Array<{
   { key: '/skills', icon: <ToolOutlined />, label: 'Skills', title: 'Skills', subtitle: 'Agent 高级任务单元', permissions: [MENU_PERMISSIONS['/skills']] },
   { key: '/documents', icon: <FileTextOutlined />, label: '文档库', title: '文档库', subtitle: '上传 · 刷新 · 重新嵌入 · 删除', permissions: [MENU_PERMISSIONS['/documents']] },
   { key: '/chat', icon: <MessageOutlined />, label: '法律助手', title: '法律助手', subtitle: CHAT_SUBTITLE, permissions: [MENU_PERMISSIONS['/chat']] },
+  { key: '/excel', icon: <DatabaseOutlined />, label: 'Excel 分析', title: 'Excel 分析', subtitle: '数据画像 · 透视表 · 可视化', permissions: [MENU_PERMISSIONS['/chat']] },
   { key: '/users', icon: <TeamOutlined />, label: '访问控制', title: '访问控制', subtitle: '用户账号 · 角色 · 权限', permissions: ['users:manage', 'roles:manage'] },
   { key: '/kg', icon: <PartitionOutlined />, label: '知识图谱', title: '知识图谱', subtitle: '图谱可视化与导航', permissions: [MENU_PERMISSIONS['/kg']] },
   { key: '/settings', icon: <SettingOutlined />, label: '参数配置', title: '参数配置', subtitle: '检索流水线 · 文本切割', permissions: [MENU_PERMISSIONS['/settings']] },
@@ -120,7 +123,8 @@ export default function App() {
   const isDocDetail = location.pathname.startsWith('/documents/') && location.pathname !== '/documents';
   const isChatPage = location.pathname === '/chat' || location.pathname.startsWith('/chat/');
   const isKgPage = location.pathname === '/kg';
-  const isFullBleedPage = isChatPage || isKgPage;
+  const isExcelPage = location.pathname === '/excel';
+  const isFullBleedPage = isChatPage || isKgPage || isExcelPage;
   const currentItem = ALL_MENU_ITEMS.find(m => m.key === selectedKey);
 
   const headerDisplay = isDocDetail
@@ -235,14 +239,16 @@ export default function App() {
           className={
             isChatPage ? 'kc-page-content kc-page-content-chat'
               : isKgPage ? 'kc-page-content kc-page-content-kg'
-                : 'kc-page-content'
+                : isExcelPage ? 'kc-page-content kc-page-content-excel'
+                  : 'kc-page-content'
           }
           style={{ padding: isFullBleedPage ? undefined : 20 }}
         >
           <div className={
             isChatPage ? 'kc-page-inner kc-page-inner-chat'
               : isKgPage ? 'kc-page-inner kc-page-inner-kg'
-                : 'kc-page-inner'
+                : isExcelPage ? 'kc-page-inner kc-page-inner-excel'
+                  : 'kc-page-inner'
           }>
             <Routes>
               <Route element={<ProtectedRoute />}>
@@ -254,6 +260,7 @@ export default function App() {
                 <Route path="/documents/:id" element={<DocDetail />} />
                 <Route path="/chat" element={<Chat />} />
                 <Route path="/chat/:sessionId" element={<Chat />} />
+                <Route path="/excel" element={<ExcelAnalysis />} />
                 <Route path="/users" element={<Users />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/kg" element={<KnowledgeGraph />} />

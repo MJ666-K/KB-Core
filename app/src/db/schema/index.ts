@@ -10,6 +10,8 @@ export { skillDefinitions } from './skill-definitions';
 export { chatSessions, chatMessages } from './chat-session';
 export { users, apiTokens } from './user';
 export { roles, rolePermissions } from './role';
+export { excelProfiles, pivotTables, excelReports } from './excel';
 export type { Citation, ToolCallRecord } from './query-log';
 export type { ChatMessageMeta } from './chat-session';
 export type { AgentStep } from './agent-trace';
+export type { SheetProfile, ColumnProfile, PivotConfig, VisualizationData } from './excel';
