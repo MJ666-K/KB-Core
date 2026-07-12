@@ -4,7 +4,7 @@ import { requirePermission } from '../auth/middleware';
 import { db } from '../db/client';
 import { documents, chunks, datasets as datasetsSchema } from '../db/schema';
 import { eq, and, isNull, desc, sql, inArray } from 'drizzle-orm';
-import { readDocumentText } from '../storage/document-storage';
+import { readDocumentText, isKgSourcePath } from '../storage/document-storage';
 import { normalizeDocumentContent } from '../utils/text-normalize';
 import { resetDocumentForReingest, enqueueIngest } from '../pipeline/document-reset';
 import { logger } from '../utils/logger';
@@ -73,11 +73,11 @@ app.get('/:id/content', requirePermission('documents:read'), async (c) => {
     .from(documents).where(eq(documents.id, id));
   if (!doc) return c.json({ error: 'Document not found' }, 404);
   try {
-    const content = normalizeDocumentContent(await readDocumentText(doc.sourcePath));
+    const content = normalizeDocumentContent(await readDocumentText(doc.sourcePath, { documentId: id }));
     return c.text(content);
   } catch (err) {
     logger.error('[Documents] Failed to read content', { id, sourcePath: doc.sourcePath, err });
-    return c.json({ error: 'File not found in storage' }, 404);
+    return c.json({ error: 'Content not available' }, 404);
   }
 });
 
@@ -120,6 +120,9 @@ app.post('/:id/reingest', requirePermission('documents:write'), async (c) => {
   const [doc] = await db.select({ sourcePath: documents.sourcePath, datasetId: documents.datasetId })
     .from(documents).where(and(eq(documents.id, id), isNull(documents.deletedAt)));
   if (!doc) return c.json({ error: 'Document not found' }, 404);
+  if (isKgSourcePath(doc.sourcePath)) {
+    return c.json({ error: 'KG virtual documents cannot be re-ingested' }, 400);
+  }
 
   await resetDocumentForReingest(id);
   await enqueueIngest(id, doc.sourcePath, doc.datasetId);
