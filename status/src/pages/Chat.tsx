@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, memo } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Input, Button, Card, Typography, Popconfirm, message, Spin, Collapse,
 } from 'antd';
@@ -8,6 +8,7 @@ import {
   PlusOutlined, DeleteOutlined, MessageOutlined, StopOutlined,
 } from '@ant-design/icons';
 import { api } from '../api';
+import { kgApi } from '../api/kgApi';
 import MarkdownContent from '../MarkdownContent';
 import { sanitizeAnswerContent } from '../sanitizeAnswerContent';
 import { statusMessage, shouldShowAction } from '../chatLabels';
@@ -170,6 +171,34 @@ export default function Chat() {
   const [loadingSession, setLoadingSession] = useState(false);
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [hints, setHints] = useState<string[]>(HINTS_FALLBACK);
+  const [kgNodeInitialQuery, setKgNodeInitialQuery] = useState<string | null>(null);
+
+  // 处理 ?kgNode=xxx 入参：从图谱跳到 Chat 时预填问题
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const kgNodeId = searchParams.get('kgNode');
+    if (!kgNodeId) {
+      setKgNodeInitialQuery(null);
+      return;
+    }
+    let cancelled = false;
+    kgApi.getNode(kgNodeId)
+      .then(({ node }) => {
+        if (cancelled || !node) return;
+        const question = `请介绍一下「${node.label}」节点（${node.type} · ${node.category}）的相关内容，包括它的法律依据、关联证据和参考案例。`;
+        setKgNodeInitialQuery(question);
+      })
+      .catch(() => { /* ignore */ })
+      .finally(() => {
+        // 清掉 URL 参数，避免重复触发
+        if (!cancelled) {
+          const next = new URLSearchParams(searchParams);
+          next.delete('kgNode');
+          setSearchParams(next, { replace: true });
+        }
+      });
+    return () => { cancelled = true; };
+  }, [searchParams, setSearchParams]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const assistantIdRef = useRef<string | null>(null);
@@ -1034,6 +1063,7 @@ export default function Chat() {
               loading={loading}
               onSend={send}
               onStop={stopGeneration}
+              initialQuery={kgNodeInitialQuery ?? undefined}
             />
             <p className="kc-chat-disclaimer">
             以上内容仅供参考，不构成法律意见。具体问题请咨询专业律师。
@@ -1186,12 +1216,19 @@ const ChatInputBar = memo(function ChatInputBar({
   loading,
   onSend,
   onStop,
+  initialQuery,
 }: {
   loading: boolean;
   onSend: (text: string) => void;
   onStop: () => void;
+  initialQuery?: string;
 }) {
   const [question, setQuestion] = useState('');
+
+  // 从图谱跳转来时预填问题
+  useEffect(() => {
+    if (initialQuery) setQuestion(initialQuery);
+  }, [initialQuery]);
 
   const submit = useCallback(() => {
     const text = question.trim();

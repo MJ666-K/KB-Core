@@ -12,6 +12,8 @@ import {
 } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkCjkFriendly from 'remark-cjk-friendly';
+import remarkCjkFriendlyGfmStrikethrough from 'remark-cjk-friendly-gfm-strikethrough';
 import { CopyOutlined, CheckOutlined, LoadingOutlined } from '@ant-design/icons';
 import { message } from 'antd';
 import { normalizeCitationMarkers } from './normalizeCitationMarkers';
@@ -292,7 +294,7 @@ const MarkdownContent = memo(function MarkdownContent({ content, className = 'kc
   return (
     <div className={className}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkCjkFriendly, remarkCjkFriendlyGfmStrikethrough]}
         components={{
           a: ({ href, children }) => {
             if (href?.startsWith('#cite-')) {

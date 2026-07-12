@@ -29,6 +29,13 @@
       "when": 1783275400001,
       "tag": "0003_traceability_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1783771564124,
+      "tag": "0004_loose_clea",
+      "breakpoints": true
     }
   ]
 }

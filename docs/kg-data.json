@@ -1,0 +1,609 @@
+{
+  "meta": {
+    "version": "1.0",
+    "author": "产品C",
+    "source": "基于B《上海市街镇综合调解标准化流程》梳理",
+    "last_updated": "2026-06-21",
+    "naming_convention": {
+      "flow": "流程节点",
+      "law": "法规节点",
+      "ev": "证据节点",
+      "case": "案例节点"
+    },
+    "legend": {
+      "node_types": {
+        "法规": "蓝色矩形 - 法律/行政法规/司法解释/裁审口径",
+        "案例": "绿色圆形 - 典型判例/调解案例",
+        "证据": "橙色菱形 - 证据类型/材料清单",
+        "流程": "紫色圆角矩形 - 调解步骤/业务流程节点"
+      },
+      "edge_types": {
+        "solid": "实线 - 适用/引用（法规是某问题的法律依据）",
+        "dashed": "虚线 - 要求/需要（某流程需要某类证据）"
+      }
+    }
+  },
+
+  "nodes": [
+    "══════════════════════════════════════════════",
+    "第一组：劳动争议调解全流程节点（来源：B文档-街镇劳动办流程）",
+    "══════════════════════════════════════════════",
+
+    {
+      "id": "flow_labor_apply",
+      "label": "提交调解申请",
+      "type": "流程",
+      "category": "劳动调解",
+      "step_order": 1,
+      "law": "《劳动争议调解仲裁法》第十条：发生劳动争议，当事人可以到下列调解组织申请调解：（一）企业劳动争议调解委员会；（二）依法设立的基层人民调解组织；（三）在乡镇、街道设立的具有劳动争议调解职能的组织。",
+      "case": "支持书面申请、现场口头申请（工作人员笔录签字生效）。需写明双方主体、用工事实、争议焦点、调解诉求。",
+      "output_doc": "调解申请书 / 口头申请笔录"
+    },
+    {
+      "id": "flow_labor_review",
+      "label": "初审与意愿征询",
+      "type": "流程",
+      "category": "劳动调解",
+      "step_order": 2,
+      "law": "《劳动争议调解仲裁法》第十二条：当事人申请劳动争议调解可以书面申请，也可以口头申请。口头申请的，调解组织应当当场记录申请人基本情况、申请调解的争议事项、理由和时间。",
+      "case": "3个工作日内完成：核查是否属于劳动争议、是否属地管辖；联系另一方确认是否同意调解。另一方明确拒绝→不予受理/终止调解。",
+      "duration": "3个工作日",
+      "output_doc": "受理/不予受理通知书"
+    },
+    {
+      "id": "flow_labor_accept",
+      "label": "受理立案",
+      "type": "流程",
+      "category": "劳动调解",
+      "step_order": 3,
+      "law": "《劳动争议调解仲裁法》第十三条：调解劳动争议，应当充分听取双方当事人对事实和理由的陈述，耐心疏导，帮助其达成协议。",
+      "case": "双方均自愿调解，登记建档，分配调解员。",
+      "output_doc": "调解卷宗"
+    },
+    {
+      "id": "flow_labor_assign",
+      "label": "指派调解员",
+      "type": "流程",
+      "category": "劳动调解",
+      "step_order": 4,
+      "law": "",
+      "case": "指派专职劳动调解员，向双方告知调解员姓名、调解权利、回避规则、自愿原则。",
+      "output_doc": "调解员指派通知书"
+    },
+    {
+      "id": "flow_labor_meeting",
+      "label": "组织调解会谈",
+      "type": "流程",
+      "category": "劳动调解",
+      "step_order": 5,
+      "law": "《劳动争议调解仲裁法》第十三条",
+      "case": "分别听取双方陈述，核对考勤、合同、薪资等证据，释法梳理责任，协商和解方案。支持线上/线下。",
+      "output_doc": "调解笔录"
+    },
+    {
+      "id": "flow_labor_success",
+      "label": "调解成功-签订协议",
+      "type": "流程",
+      "category": "劳动调解",
+      "step_order": 6,
+      "law": "《劳动争议调解仲裁法》第十四条：经调解达成协议的，应当制作调解协议书。调解协议书由双方当事人签名或者盖章，经调解员签名并加盖调解组织印章后生效，对双方当事人具有约束力，当事人应当履行。",
+      "case": "签订《劳动争议调解协议书》，双方+调解员签字，街镇劳动办盖章，一式三份（员工、企业、存档）。双方可在15日内共同向仲裁委申请司法确认。",
+      "output_doc": "劳动争议调解协议书"
+    },
+    {
+      "id": "flow_labor_fail",
+      "label": "调解失败-出具终结",
+      "type": "流程",
+      "category": "劳动调解",
+      "step_order": 6,
+      "law": "《劳动争议调解仲裁法》第十五条：自劳动争议调解组织收到调解申请之日起十五日内未达成调解协议的，当事人可以依法申请仲裁。",
+      "case": "出具调解终结笔录，书面告知维权渠道：劳动仲裁、法院诉讼。全程记录归档。基础调解周期15日，可申请延期。",
+      "output_doc": "调解终结告知单"
+    },
+    {
+      "id": "flow_labor_confirm",
+      "label": "司法确认",
+      "type": "流程",
+      "category": "劳动调解",
+      "step_order": 7,
+      "law": "《劳动争议调解仲裁法》第十五条、第十六条",
+      "case": "调解成功双方可在15日内共同向仲裁委申请司法确认，确认后具备法院强制执行效力。",
+      "output_doc": "司法确认裁定书"
+    },
+    {
+      "id": "flow_labor_archive",
+      "label": "卷宗归档",
+      "type": "流程",
+      "category": "劳动调解",
+      "step_order": 8,
+      "law": "",
+      "case": "一案一档，全部笔录、证据、协议书统一装订存档。",
+      "output_doc": "调解卷宗（归档）"
+    },
+
+    "══════════════════════════════════════════════",
+    "第二组：邻里纠纷调解全流程节点（来源：B文档-街镇司法所/人民调解委员会流程）",
+    "══════════════════════════════════════════════",
+
+    {
+      "id": "flow_neighbor_register",
+      "label": "登记受理",
+      "type": "流程",
+      "category": "邻里调解",
+      "step_order": 1,
+      "law": "《人民调解法》第十七条：当事人可以向人民调解委员会申请调解；人民调解委员会也可以主动调解。当事人一方明确拒绝调解的，不得调解。",
+      "case": "三种启动方式：当事人单方申请、调委会主动介入（物业/居委/110/网格员上报）、委托移送调解（派出所/居委/城管移交）。硬性规则：只要一方明确拒绝，立即终止调解。3个工作日内完成核查。",
+      "duration": "3个工作日",
+      "output_doc": "调解申请书 / 不予调解告知书"
+    },
+    {
+      "id": "flow_neighbor_investigate",
+      "label": "实地调查取证",
+      "type": "流程",
+      "category": "邻里调解",
+      "step_order": 2,
+      "law": "《人民调解法》第二十二条：人民调解员根据调解纠纷的需要，可以……向有关方面调查核实。",
+      "case": "邻里纠纷特有环节：调解员2人以上上门实地查看渗水、围墙、楼道堆物、噪音点位，拍照留存；走访楼栋长、物业、周边邻居制作证人笔录；调取物业记录、监控、房产证、规划图纸等佐证材料；分别单独约谈双方。",
+      "output_doc": "现场勘查笔录 + 照片"
+    },
+    {
+      "id": "flow_neighbor_meeting",
+      "label": "组织调解会谈",
+      "type": "流程",
+      "category": "邻里调解",
+      "step_order": 3,
+      "law": "《人民调解法》第二十一条：人民调解员调解民间纠纷，应当坚持原则，明法析理，主持公道。",
+      "case": "可联合居委、物业、社区律师、民警「三所联动」。告知调解权利、回避规则、自愿原则；分阶段倾听双方完整陈述，不中途打断；结合物业规范、民法典相邻权、小区规约释法说理；引导双方提出折中方案。",
+      "output_doc": "调解笔录"
+    },
+    {
+      "id": "flow_neighbor_success",
+      "label": "调解成功-签协议",
+      "type": "流程",
+      "category": "邻里调解",
+      "step_order": 4,
+      "law": "《人民调解法》第二十八条：经人民调解委员会调解达成调解协议的，可以制作调解协议书。",
+      "case": "制作《人民调解协议书》：写明整改方案、时间、责任、赔偿。双方+调解员签字，街镇调委会盖章，一式三份。30日内共同向法院申请司法确认。简单小事可口头协议+笔录存档。",
+      "output_doc": "人民调解协议书"
+    },
+    {
+      "id": "flow_neighbor_fail",
+      "label": "调解失败-终结",
+      "type": "流程",
+      "category": "邻里调解",
+      "step_order": 4,
+      "law": "《人民调解法》第二十六条：人民调解员调解纠纷不成的，应当终止调解，并告知当事人可以依法通过仲裁、行政、司法等途径维护自己的权利。",
+      "case": "完整记录调解全过程、双方分歧点；出具《调解终结告知单》；告知维权途径：居委协调、民事诉讼、城管/环保投诉、110报警。",
+      "output_doc": "调解终结告知单"
+    },
+    {
+      "id": "flow_neighbor_confirm",
+      "label": "司法确认",
+      "type": "流程",
+      "category": "邻里调解",
+      "step_order": 5,
+      "law": "《人民调解法》第三十三条：经人民调解委员会调解达成调解协议后，双方当事人认为有必要的，可以自调解协议生效之日起三十日内共同向人民法院申请司法确认。",
+      "case": "双方可在30日内共同向属地法院申请司法确认，确认后具备强制执行效力。",
+      "output_doc": "司法确认裁定书"
+    },
+    {
+      "id": "flow_neighbor_archive",
+      "label": "归档回访",
+      "type": "流程",
+      "category": "邻里调解",
+      "step_order": 6,
+      "law": "",
+      "case": "一案一档，全部笔录、照片、证据、协议书统一装订存档。达成协议的7-15日内电话/上门回访，核查履行情况；出现反悔可再次组织简易调解。",
+      "output_doc": "回访记录"
+    },
+
+    "══════════════════════════════════════════════",
+    "第三组：劳动争议-证据材料节点（来源：B文档-申请材料清单）",
+    "══════════════════════════════════════════════",
+
+    {
+      "id": "ev_labor_app_form",
+      "label": "调解申请书",
+      "type": "证据",
+      "category": "劳动调解",
+      "law": "",
+      "case": "企业版需含：双方主体信息、用工事实、争议焦点、调解诉求。员工版可口头申请，工作人员现场制作笔录。"
+    },
+    {
+      "id": "ev_labor_biz_license",
+      "label": "营业执照",
+      "type": "证据",
+      "category": "劳动调解",
+      "law": "",
+      "case": "企业申请调解时需提供营业执照复印件（加盖公章）。"
+    },
+    {
+      "id": "ev_labor_legal_rep",
+      "label": "法定代表人身份证明",
+      "type": "证据",
+      "category": "劳动调解",
+      "law": "",
+      "case": "企业申请调解时需提供，证明经办人具有合法授权。"
+    },
+    {
+      "id": "ev_labor_auth_letter",
+      "label": "经办人授权委托书",
+      "type": "证据",
+      "category": "劳动调解",
+      "law": "",
+      "case": "非法定代表人本人办理时需提供，明确授权范围。"
+    },
+    {
+      "id": "ev_labor_contract",
+      "label": "劳动合同",
+      "type": "证据",
+      "category": "劳动调解",
+      "law": "《劳动合同法》第十条：建立劳动关系，应当订立书面劳动合同。",
+      "case": "证明劳动关系、合同期限、约定条款等核心事实。是审查违法条款（试用期、加班费、竞业限制等）的关键证据。"
+    },
+    {
+      "id": "ev_labor_attendance",
+      "label": "考勤记录",
+      "type": "证据",
+      "category": "劳动调解",
+      "law": "",
+      "case": "证明加班时长、工作时间、出勤情况。打卡记录显示加班时数是计算加班费的核心依据。"
+    },
+    {
+      "id": "ev_labor_salary_log",
+      "label": "工资流水",
+      "type": "证据",
+      "category": "劳动调解",
+      "law": "",
+      "case": "银行流水可显示月薪数额、加班费是否支付、社保缴费基数。结合加班记录可计算未付加班费。"
+    },
+    {
+      "id": "ev_labor_comm_record",
+      "label": "沟通记录",
+      "type": "证据",
+      "category": "劳动调解",
+      "law": "",
+      "case": "微信/邮件/钉钉等证明加班安排、协商过程、公司承诺等。包括加班安排通知、解除前沟通记录、社保缴纳承诺。"
+    },
+    {
+      "id": "ev_labor_id_card",
+      "label": "身份证",
+      "type": "证据",
+      "category": "劳动调解",
+      "law": "",
+      "case": "员工申请调解时的身份证明。"
+    },
+    {
+      "id": "ev_labor_relation_proof",
+      "label": "劳动关系证明",
+      "type": "证据",
+      "category": "劳动调解",
+      "law": "",
+      "case": "工牌、工资流水、劳动合同等均可证明劳动关系存在。"
+    },
+    {
+      "id": "ev_labor_dismissal_notice",
+      "label": "解除通知书",
+      "type": "证据",
+      "category": "劳动调解",
+      "law": "《劳动合同法》第四十条、第四十一条",
+      "case": "证明解除事由、解除时间、解除程序合法性。公司以「业务调整」为由发出的解除通知，需审查是否构成法定解除事由。"
+    },
+    {
+      "id": "ev_labor_negotiation_note",
+      "label": "企业前期协商说明",
+      "type": "证据",
+      "category": "劳动调解",
+      "law": "",
+      "case": "企业主动申请调解时可提交前期协商沟通说明（可选），有助于调解员快速了解争议背景。"
+    },
+
+    "══════════════════════════════════════════════",
+    "第四组：邻里纠纷-证据材料节点（来源：B文档-邻里纠纷材料清单）",
+    "══════════════════════════════════════════════",
+
+    {
+      "id": "ev_neighbor_id_card",
+      "label": "身份证",
+      "type": "证据",
+      "category": "邻里调解",
+      "law": "",
+      "case": "申请人身份证明，口头申请可现场填写笔录。"
+    },
+    {
+      "id": "ev_neighbor_property_cert",
+      "label": "房产证/租房合同",
+      "type": "证据",
+      "category": "邻里调解",
+      "law": "",
+      "case": "证明邻里权属关系，确认是否属于本街镇管辖。"
+    },
+    {
+      "id": "ev_neighbor_water_photo",
+      "label": "渗水照片",
+      "type": "证据",
+      "category": "邻里调解",
+      "law": "民法典第二百九十六条：不动产权利人因用水、排水、通行、铺设管线等利用相邻不动产的，应当尽量避免对相邻的不动产权利人造成损害。",
+      "case": "房屋渗水类邻里纠纷的核心证据，需拍摄渗水位置、范围、受损情况。"
+    },
+    {
+      "id": "ev_neighbor_noise_record",
+      "label": "噪音录音",
+      "type": "证据",
+      "category": "邻里调解",
+      "law": "《噪声污染防治法》第六十五条：家庭及其成员应当培养减少噪声产生的良好习惯……使用家用电器、乐器或者进行其他家庭场所活动，应当控制音量或者采取其他有效措施，防止噪声污染。",
+      "case": "噪音扰民类纠纷的核心证据，需记录时间、持续时长、分贝（如可测）。"
+    },
+    {
+      "id": "ev_neighbor_pile_video",
+      "label": "楼道堆物视频",
+      "type": "证据",
+      "category": "邻里调解",
+      "law": "民法典第二百八十八条：不动产的相邻权利人应当按照有利生产、方便生活、团结互助、公平合理的原则，正确处理相邻关系。",
+      "case": "公共区域占用类纠纷证据，记录堆物位置、面积、是否堵塞消防通道。"
+    },
+    {
+      "id": "ev_neighbor_property_record",
+      "label": "物业沟通记录",
+      "type": "证据",
+      "category": "邻里调解",
+      "law": "",
+      "case": "向物业报修、投诉的历史记录，证明矛盾持续时间和前期处理情况。"
+    },
+    {
+      "id": "ev_neighbor_police_receipt",
+      "label": "报警回执",
+      "type": "证据",
+      "category": "邻里调解",
+      "law": "",
+      "case": "矛盾升级至报警处理的记录，可作为调解参考。"
+    },
+    {
+      "id": "ev_neighbor_witness",
+      "label": "证人证言",
+      "type": "证据",
+      "category": "邻里调解",
+      "law": "",
+      "case": "楼栋长、物业人员、周边邻居的证人笔录，提供第三方视角。"
+    },
+    {
+      "id": "ev_neighbor_auth_letter",
+      "label": "授权委托书",
+      "type": "证据",
+      "category": "邻里调解",
+      "law": "",
+      "case": "委托他人代办调解时需提供。"
+    },
+
+    "══════════════════════════════════════════════",
+    "第五组：法规节点（来源：B文档引用法条 + D知识库已有法条）",
+    "══════════════════════════════════════════════",
+
+    {
+      "id": "law_labor_dispute_mediation",
+      "label": "劳动争议调解仲裁法",
+      "type": "法规",
+      "category": "劳动调解",
+      "law": "《中华人民共和国劳动争议调解仲裁法》2008年5月1日施行。规范劳动争议调解、仲裁程序，明确调解组织、调解协议效力、仲裁时效等。",
+      "case": "全国人大常委会通过，现行有效。"
+    },
+    {
+      "id": "law_labor_contract",
+      "label": "劳动合同法",
+      "type": "法规",
+      "category": "劳动调解",
+      "law": "《中华人民共和国劳动合同法》2008年1月1日施行，2012年12月28日修订。共8章98条，涵盖劳动合同的订立、履行、变更、解除和终止。",
+      "case": "核心条款：第十九条（试用期）、第三十一条（加班费）、第三十八条（劳动者解除权）、第四十六条/四十七条（经济补偿）、第八十七条（违法解除赔偿金）。"
+    },
+    {
+      "id": "law_labor",
+      "label": "劳动法",
+      "type": "法规",
+      "category": "劳动调解",
+      "law": "《中华人民共和国劳动法》1995年1月1日施行。规定工时制度、加班费计算（第四十四条工作日1.5倍/休息日2倍/节假日3倍）、休息休假、最低工资等基础劳动制度。",
+      "case": "全国人大常委会通过，现行有效。"
+    },
+    {
+      "id": "law_people_mediation",
+      "label": "人民调解法",
+      "type": "法规",
+      "category": "邻里调解",
+      "law": "《中华人民共和国人民调解法》2011年1月1日施行。规范人民调解委员会的组织、调解程序、调解协议效力、司法确认等制度。",
+      "case": "核心条款：第十七条（自愿原则）、第二十一条（明法析理）、第二十二条（调查核实权）、第二十八条（调解协议书）、第三十三条（司法确认）。"
+    },
+    {
+      "id": "law_civil_code_neighbor",
+      "label": "民法典相邻权",
+      "type": "法规",
+      "category": "邻里调解",
+      "law": "《中华人民共和国民法典》第二百八十八条至第二百九十六条。相邻关系处理原则：有利生产、方便生活、团结互助、公平合理。涵盖用水排水、通行、通风采光、环境保护等。",
+      "case": "第二百九十四条：不动产权利人不得违反国家规定弃置固体废物，排放大气污染物、水污染物、土壤污染物、噪声、光辐射、电磁辐射等有害物质。"
+    },
+    {
+      "id": "law_noise_prevention",
+      "label": "噪声污染防治法",
+      "type": "法规",
+      "category": "邻里调解",
+      "law": "《中华人民共和国噪声污染防治法》2022年6月5日施行。规范工业噪声、建筑施工噪声、交通运输噪声、社会生活噪声的防治。",
+      "case": "第六十五条：家庭及其成员应当培养减少噪声产生的良好习惯，防止噪声污染。"
+    },
+    {
+      "id": "law_public_security",
+      "label": "治安管理处罚法",
+      "type": "法规",
+      "category": "邻里调解",
+      "law": "《中华人民共和国治安管理处罚法》2006年3月1日施行。对扰乱公共秩序、侵犯人身权利、财产权利等行为的处罚规定。",
+      "case": "第五十八条：违反关于社会生活噪声污染防治的法律规定，制造噪声干扰他人正常生活的，处警告；警告后不改正的，处二百元以上五百元以下罚款。"
+    },
+    {
+      "id": "law_judicial_interpretation_4",
+      "label": "劳动争议司法解释四",
+      "type": "法规",
+      "category": "劳动调解",
+      "law": "《最高人民法院关于审理劳动争议案件适用法律问题的解释（四）》2021年1月1日施行。共15条，统一竞业限制等劳动争议裁判标准。",
+      "case": "最高人民法院发布，现行有效。"
+    },
+
+    "══════════════════════════════════════════════",
+    "第六组：案例节点（来源：原型已有 + 典型劳动案例）",
+    "══════════════════════════════════════════════",
+
+    {
+      "id": "case_zhang_vs_tech",
+      "label": "张某诉科技公司案",
+      "type": "案例",
+      "category": "劳动调解",
+      "law": "《劳动合同法》第八十七条：违法解除赔偿金。",
+      "case": "（2024）沪0115民初1234号：上海浦东新区法院判决。张某入职1年，合同约定试用期6个月、加班费含在工资中。公司以「业务调整」解除合同。认定不构成法定解除事由，判决赔偿金20000元+加班费。"
+    },
+    {
+      "id": "case_li_vs_catering",
+      "label": "李某诉餐饮公司案",
+      "type": "案例",
+      "category": "劳动调解",
+      "law": "《劳动合同法》第三十一条、《劳动法》第四十四条。",
+      "case": "（2023）京03民终5678号：北京三中院判决。合同约定「加班费含在工资中」，法院认定该条款无效，全额支持加班费主张35000元。"
+    },
+    {
+      "id": "case_wang_vs_logistics",
+      "label": "王某诉物流公司案",
+      "type": "案例",
+      "category": "劳动调解",
+      "law": "《劳动合同法》第三十八条。",
+      "case": "（2024）粤0305民初9012号：未足额缴纳社保，劳动者可解除合同并主张经济补偿。"
+    },
+    {
+      "id": "case_zhao_vs_internet",
+      "label": "赵某诉互联网公司案",
+      "type": "案例",
+      "category": "劳动调解",
+      "law": "《劳动合同法》第二十三条。",
+      "case": "（2023）浙01民终3456号：竞业限制未支付补偿金满3个月，竞业限制解除。"
+    },
+    {
+      "id": "case_chen_vs_education",
+      "label": "陈某诉教育公司案",
+      "type": "案例",
+      "category": "劳动调解",
+      "law": "《劳动合同法》第十九条。",
+      "case": "（2024）苏05民终7890号：1年合同约定6个月试用期违法，需赔偿工资差额。"
+    }
+  ],
+
+  "edges": [
+    "══════════════════════════════════════════════",
+    "劳动调解流程连线",
+    "══════════════════════════════════════════════",
+
+    {"from": "flow_labor_apply", "to": "flow_labor_review", "type": "solid", "label": "下一步"},
+    {"from": "flow_labor_review", "to": "flow_labor_accept", "type": "solid", "label": "同意调解"},
+    {"from": "flow_labor_review", "to": "flow_labor_archive", "type": "dashed", "label": "拒绝→终止"},
+    {"from": "flow_labor_accept", "to": "flow_labor_assign", "type": "solid", "label": "下一步"},
+    {"from": "flow_labor_assign", "to": "flow_labor_meeting", "type": "solid", "label": "下一步"},
+    {"from": "flow_labor_meeting", "to": "flow_labor_success", "type": "solid", "label": "达成一致"},
+    {"from": "flow_labor_meeting", "to": "flow_labor_fail", "type": "dashed", "label": "未达成一致"},
+    {"from": "flow_labor_success", "to": "flow_labor_confirm", "type": "solid", "label": "申请司法确认"},
+    {"from": "flow_labor_success", "to": "flow_labor_archive", "type": "solid", "label": "归档"},
+    {"from": "flow_labor_fail", "to": "flow_labor_archive", "type": "solid", "label": "归档"},
+    {"from": "flow_labor_confirm", "to": "flow_labor_archive", "type": "solid", "label": "归档"},
+
+    {"from": "law_labor_dispute_mediation", "to": "flow_labor_apply", "type": "solid", "label": "法律依据"},
+    {"from": "law_labor_dispute_mediation", "to": "flow_labor_review", "type": "solid", "label": "法律依据"},
+    {"from": "law_labor_dispute_mediation", "to": "flow_labor_success", "type": "solid", "label": "法律依据"},
+    {"from": "law_labor_dispute_mediation", "to": "flow_labor_fail", "type": "solid", "label": "法律依据"},
+    {"from": "law_labor_contract", "to": "flow_labor_meeting", "type": "solid", "label": "法律依据"},
+    {"from": "law_labor", "to": "flow_labor_meeting", "type": "solid", "label": "法律依据"},
+
+    {"from": "flow_labor_apply", "to": "ev_labor_app_form", "type": "dashed", "label": "需要材料"},
+    {"from": "flow_labor_apply", "to": "ev_labor_biz_license", "type": "dashed", "label": "企业需提供"},
+    {"from": "flow_labor_apply", "to": "ev_labor_legal_rep", "type": "dashed", "label": "企业需提供"},
+    {"from": "flow_labor_apply", "to": "ev_labor_auth_letter", "type": "dashed", "label": "代办需提供"},
+    {"from": "flow_labor_apply", "to": "ev_labor_id_card", "type": "dashed", "label": "员工需提供"},
+    {"from": "flow_labor_apply", "to": "ev_labor_relation_proof", "type": "dashed", "label": "员工需提供"},
+    {"from": "flow_labor_meeting", "to": "ev_labor_contract", "type": "dashed", "label": "需要核对"},
+    {"from": "flow_labor_meeting", "to": "ev_labor_attendance", "type": "dashed", "label": "需要核对"},
+    {"from": "flow_labor_meeting", "to": "ev_labor_salary_log", "type": "dashed", "label": "需要核对"},
+    {"from": "flow_labor_meeting", "to": "ev_labor_comm_record", "type": "dashed", "label": "需要核对"},
+    {"from": "flow_labor_meeting", "to": "ev_labor_dismissal_notice", "type": "dashed", "label": "需要核对"},
+    {"from": "flow_labor_apply", "to": "ev_labor_negotiation_note", "type": "dashed", "label": "可选提供"},
+
+    {"from": "case_zhang_vs_tech", "to": "flow_labor_meeting", "type": "solid", "label": "参考案例"},
+    {"from": "case_zhang_vs_tech", "to": "ev_labor_dismissal_notice", "type": "solid", "label": "关键证据"},
+    {"from": "case_li_vs_catering", "to": "ev_labor_salary_log", "type": "solid", "label": "关键证据"},
+    {"from": "case_li_vs_catering", "to": "ev_labor_attendance", "type": "solid", "label": "关键证据"},
+    {"from": "case_wang_vs_logistics", "to": "ev_labor_contract", "type": "solid", "label": "关键证据"},
+    {"from": "case_zhao_vs_internet", "to": "law_judicial_interpretation_4", "type": "solid", "label": "援引司法解释"},
+
+    "══════════════════════════════════════════════",
+    "邻里调解流程连线",
+    "══════════════════════════════════════════════",
+
+    {"from": "flow_neighbor_register", "to": "flow_neighbor_investigate", "type": "solid", "label": "同意调解"},
+    {"from": "flow_neighbor_register", "to": "flow_neighbor_archive", "type": "dashed", "label": "拒绝→终止"},
+    {"from": "flow_neighbor_investigate", "to": "flow_neighbor_meeting", "type": "solid", "label": "下一步"},
+    {"from": "flow_neighbor_meeting", "to": "flow_neighbor_success", "type": "solid", "label": "达成一致"},
+    {"from": "flow_neighbor_meeting", "to": "flow_neighbor_fail", "type": "dashed", "label": "未达成一致"},
+    {"from": "flow_neighbor_success", "to": "flow_neighbor_confirm", "type": "solid", "label": "申请司法确认"},
+    {"from": "flow_neighbor_success", "to": "flow_neighbor_archive", "type": "solid", "label": "归档"},
+    {"from": "flow_neighbor_fail", "to": "flow_neighbor_archive", "type": "solid", "label": "归档"},
+    {"from": "flow_neighbor_confirm", "to": "flow_neighbor_archive", "type": "solid", "label": "归档"},
+
+    {"from": "law_people_mediation", "to": "flow_neighbor_register", "type": "solid", "label": "法律依据"},
+    {"from": "law_people_mediation", "to": "flow_neighbor_investigate", "type": "solid", "label": "法律依据"},
+    {"from": "law_people_mediation", "to": "flow_neighbor_meeting", "type": "solid", "label": "法律依据"},
+    {"from": "law_people_mediation", "to": "flow_neighbor_success", "type": "solid", "label": "法律依据"},
+    {"from": "law_people_mediation", "to": "flow_neighbor_confirm", "type": "solid", "label": "法律依据"},
+    {"from": "law_civil_code_neighbor", "to": "flow_neighbor_meeting", "type": "solid", "label": "法律依据"},
+    {"from": "law_noise_prevention", "to": "flow_neighbor_meeting", "type": "solid", "label": "法律依据"},
+    {"from": "law_public_security", "to": "flow_neighbor_meeting", "type": "solid", "label": "法律依据"},
+
+    {"from": "flow_neighbor_register", "to": "ev_neighbor_id_card", "type": "dashed", "label": "需要材料"},
+    {"from": "flow_neighbor_register", "to": "ev_neighbor_property_cert", "type": "dashed", "label": "需要材料"},
+    {"from": "flow_neighbor_register", "to": "ev_neighbor_auth_letter", "type": "dashed", "label": "代办需提供"},
+    {"from": "flow_neighbor_investigate", "to": "ev_neighbor_water_photo", "type": "dashed", "label": "渗水类需采集"},
+    {"from": "flow_neighbor_investigate", "to": "ev_neighbor_noise_record", "type": "dashed", "label": "噪音类需采集"},
+    {"from": "flow_neighbor_investigate", "to": "ev_neighbor_pile_video", "type": "dashed", "label": "堆物类需采集"},
+    {"from": "flow_neighbor_investigate", "to": "ev_neighbor_property_record", "type": "dashed", "label": "需调取"},
+    {"from": "flow_neighbor_investigate", "to": "ev_neighbor_police_receipt", "type": "dashed", "label": "如有需调取"},
+    {"from": "flow_neighbor_investigate", "to": "ev_neighbor_witness", "type": "dashed", "label": "需采集"},
+
+    "══════════════════════════════════════════════",
+    "劳动争议-争议焦点与法规关联（原型已有节点扩展）",
+    "══════════════════════════════════════════════",
+
+    {"from": "law_labor_contract", "to": "case_zhang_vs_tech", "type": "solid", "label": "法律依据"},
+    {"from": "law_labor", "to": "case_li_vs_catering", "type": "solid", "label": "法律依据"},
+    {"from": "law_labor_contract", "to": "case_chen_vs_education", "type": "solid", "label": "第十九条"},
+    {"from": "law_labor_contract", "to": "case_wang_vs_logistics", "type": "solid", "label": "第三十八条"},
+    {"from": "law_labor_contract", "to": "case_zhao_vs_internet", "type": "solid", "label": "第二十三条"},
+    {"from": "law_judicial_interpretation_4", "to": "case_zhao_vs_internet", "type": "solid", "label": "竞业限制标准"}
+  ],
+
+  "blank_nodes_todo": [
+    "══════════════════════════════════════════════",
+    "待B交付企业合规流程后补充的节点",
+    "══════════════════════════════════════════════",
+    "企法六步推理：案情梳理 → 责任定性 → 法规调取 → 风险排查 → 后果告知 → 合规方案",
+    "适用场景：股权、合同、用工、财税、稽查、审计、商事合规",
+    "",
+    "待补充：",
+    "  - flow_commerce_* 系列节点（企业合规审查流程）",
+    "  - flow_hr_audit_* 系列节点（用工风险排查流程）",
+    "  - 商事合同审查流程节点",
+    "  - 财税合规审查流程节点",
+    "  - 对应的案例节点",
+    "",
+    "已有知识库法规可关联的节点：",
+    "  - law_company_2024: 2024新版公司法",
+    "  - law_partnership: 合伙企业法",
+    "  - law_commercial_contract: 民法典商事合同编",
+    "  - law_equity_dispute: 股权与合伙纠纷",
+    "  - law_accounting: 会计法",
+    "  - law_audit: 审计法",
+    "  - law_tax_admin: 税收征收管理法",
+    "  - law_corporate_tax: 企业所得税法",
+    "  - law_vat: 增值税及发票管理办法",
+    "  - law_bidding: 招投标法（待补充）",
+    "  - law_social_security: 社保公积金条例（待补充）"
+  ]
+}

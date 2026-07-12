@@ -11,6 +11,7 @@ import sessionsRouter from './sessions';
 import settingsRouter from './settings';
 import skillMetaRouter from './skill-meta';
 import authRouter from './auth';
+import kgRouter from './kg';
 import queryJobsRouter from './query-jobs';
 import usersRouter from './users';
 import rolesRouter from './roles';
@@ -35,6 +36,7 @@ export function mountApiRoutes(app: Hono): void {
   api.route('/query', queryJobsRouter);
   api.route('/users', usersRouter);
   api.route('/roles', rolesRouter);
+  api.route('/kg', kgRouter);
 
   api.post('/reload', async (c) => {
     try {

@@ -5,6 +5,8 @@ import { getChunkTool } from './get-chunk';
 import { listDocumentsTool } from './list-documents';
 import { summarizeTextTool, setLLM } from './summarize-text';
 import { callAgentTool } from './call-agent';
+import { KG_TOOLS } from '../kg/tools';
+import { config } from '../config';
 import type { HybridRetriever } from '../retrieve/retriever';
 import type { LLMService } from '../llm/llm-service';
 
@@ -27,6 +29,9 @@ export function createToolRegistry(
   registry.register(summarizeTextTool);
   if (options.includeCallAgent) {
     registry.register(callAgentTool);
+  }
+  if (config.kgEnabled) {
+    for (const t of KG_TOOLS) registry.register(t);
   }
   return registry;
 }

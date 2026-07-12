@@ -24,6 +24,7 @@ const SKILL_DISPLAY_NAMES: Record<string, string> = {
   compare: '对比分析',
   summary: '要点总结',
   followups: '推荐追问',
+  'mediation-advisor': '调解业务问答',
 };
 
 async function parseSkillMdFile(skillDir: string): Promise<ParsedSkill | null> {

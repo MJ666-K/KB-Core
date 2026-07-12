@@ -15,6 +15,7 @@ import {
   UserOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  PartitionOutlined,
 } from '@ant-design/icons';
 import Dashboard from './pages/Dashboard';
 import Agents from './pages/Agents';
@@ -24,6 +25,7 @@ import Documents from './pages/Documents';
 import DocDetail from './pages/DocDetail';
 import Chat from './pages/Chat';
 import Settings from './pages/Settings';
+import KnowledgeGraph from './pages/KnowledgeGraph';
 import Users from './pages/Users';
 import Login from './pages/Login';
 import { ProtectedRoute } from './auth/ProtectedRoute';
@@ -59,6 +61,7 @@ const ALL_MENU_ITEMS: Array<{
   { key: '/documents', icon: <FileTextOutlined />, label: '文档库', title: '文档库', subtitle: '上传 · 刷新 · 重新嵌入 · 删除', permissions: [MENU_PERMISSIONS['/documents'], 'documents:write'] },
   { key: '/chat', icon: <MessageOutlined />, label: '法律助手', title: '法律助手', subtitle: CHAT_SUBTITLE, permissions: [MENU_PERMISSIONS['/chat']] },
   { key: '/users', icon: <TeamOutlined />, label: '访问控制', title: '访问控制', subtitle: '用户账号 · 角色 · 权限', permissions: ['users:manage', 'roles:manage'] },
+  { key: '/kg', icon: <PartitionOutlined />, label: '知识图谱', title: '知识图谱', subtitle: '图谱可视化与导航', permissions: [] },
   { key: '/settings', icon: <SettingOutlined />, label: '参数配置', title: '参数配置', subtitle: '检索流水线 · 文本切割', permissions: [MENU_PERMISSIONS['/settings']] },
 ];
 
@@ -116,6 +119,8 @@ export default function App() {
 
   const isDocDetail = location.pathname.startsWith('/documents/') && location.pathname !== '/documents';
   const isChatPage = location.pathname === '/chat' || location.pathname.startsWith('/chat/');
+  const isKgPage = location.pathname === '/kg';
+  const isFullBleedPage = isChatPage || isKgPage;
   const currentItem = ALL_MENU_ITEMS.find(m => m.key === selectedKey);
 
   const headerDisplay = isDocDetail
@@ -227,10 +232,18 @@ export default function App() {
           </div>
         </Header>
         <Content
-          className={isChatPage ? 'kc-page-content kc-page-content-chat' : 'kc-page-content'}
-          style={{ padding: isChatPage ? undefined : 20 }}
+          className={
+            isChatPage ? 'kc-page-content kc-page-content-chat'
+              : isKgPage ? 'kc-page-content kc-page-content-kg'
+                : 'kc-page-content'
+          }
+          style={{ padding: isFullBleedPage ? undefined : 20 }}
         >
-          <div className={isChatPage ? 'kc-page-inner kc-page-inner-chat' : 'kc-page-inner'}>
+          <div className={
+            isChatPage ? 'kc-page-inner kc-page-inner-chat'
+              : isKgPage ? 'kc-page-inner kc-page-inner-kg'
+                : 'kc-page-inner'
+          }>
             <Routes>
               <Route element={<ProtectedRoute />}>
                 <Route path="/" element={<Dashboard />} />
@@ -243,6 +256,7 @@ export default function App() {
                 <Route path="/chat/:sessionId" element={<Chat />} />
                 <Route path="/users" element={<Users />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/kg" element={<KnowledgeGraph />} />
               </Route>
             </Routes>
           </div>

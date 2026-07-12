@@ -50,6 +50,8 @@ Agent（LLM 自主编排，主 Agent 可调度子 Agent）
 | Embedding | OpenAI 兼容接口（默认 text-embedding-v3，1024 维）|
 | Reranker | qwen3-rerank |
 | 对象存储 | 阿里云 OSS（可选，不配置则存本地）|
+| 知识图谱 | Neo4j 5.20 Community（可选，`KG_ENABLED=true` 启用）|
+| 前端可视化 | D3.js 7.x（`/kg` 页面力导向渲染）|
 
 > LLM / Embedding / Reranker 均走 OpenAI 兼容接口，可替换为任何兼容服务。
 
@@ -165,6 +167,28 @@ curl http://localhost:3000/health
 
 浏览器打开 `http://localhost:5173`，用 `admin` + 你设置的密码登录。
 
+### 6.（可选）启用知识图谱
+
+知识图谱（Neo4j）默认关闭，按需启用：
+
+```bash
+# 1) 启动 Neo4j（与 Postgres + Redis 同命令）
+cd app
+docker compose up -d neo4j
+
+# 2) 启用图谱（app/.env）
+KG_ENABLED=true
+NEO4J_URL=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=neo4j_dev_password   # 与 docker-compose.yml 里 NEO4J_AUTH 一致
+
+# 3) 重启后端让 config 生效，然后入库默认图谱数据
+bun run dev
+curl -X POST http://localhost:3000/api/kg/ingest -H 'Content-Type: application/json' -d '{}'
+```
+
+图谱可视化：浏览器打开 `http://localhost:5173/kg`，左侧选根节点 / 搜索 / 调深度，中间 D3 力导向渲染，右侧节点详情。
+
 ## API 概览
 
 后端 HTTP + WebSocket 路由（均需认证，除 `/health` 与 `/auth/*`）：
@@ -262,6 +286,7 @@ bun run typecheck           # 类型检查
 | 开发步骤与详细代码 | `docs/开发文档.md` |
 | 架构设计 | `docs/知识库设计.md` |
 | 技术选型理由 | `docs/选型说明.md` |
+| 知识图谱设计（Neo4j + D3） | `docs/知识图谱设计.md` |
 | 变更记录 | `openspec/changelog/` |
 | 新功能设计 | `openspec/add/` |
 | 架构改动 | `openspec/change/` |

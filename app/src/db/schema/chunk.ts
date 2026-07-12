@@ -1,5 +1,5 @@
 import {
-  pgTable, uuid, text, integer, timestamp, vector, pgEnum, index, uniqueIndex,
+  pgTable, uuid, text, integer, timestamp, vector, pgEnum, index, uniqueIndex, varchar,
 } from 'drizzle-orm/pg-core';
 import { documents } from './document';
 import { datasets } from './dataset';
@@ -31,12 +31,15 @@ export const chunks = pgTable('chunks', {
   embedding: vector('embedding', { dimensions: 1024 }),
   embeddingStatus: embeddingStatusEnum('embedding_status').notNull().default('pending'),
   scope: text('scope').notNull().default('platform'),
+  /** 关联的 Neo4j 知识图谱节点 id（如 law_labor_dispute_mediation），用于双向跳转 */
+  kgNodeId: varchar('kg_node_id', { length: 128 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => [
   index('chunk_embedding_idx').using('hnsw', table.embedding.op('vector_cosine_ops')),
   index('chunk_document_idx').on(table.documentId),
   index('chunk_parent_idx').on(table.parentId),
   index('chunk_dataset_idx').on(table.datasetId),
+  index('chunk_kg_node_idx').on(table.kgNodeId),
   uniqueIndex('chunk_doc_parent_child_uniq').on(
     table.documentId,
     table.parentChunkIndex,

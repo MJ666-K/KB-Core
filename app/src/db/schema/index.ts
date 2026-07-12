@@ -1,4 +1,4 @@
-export { datasets } from './dataset';
+export { datasets, datasetKindEnum } from './dataset';
 export { documents, documentStatusEnum } from './document';
 export { chunks, embeddingStatusEnum } from './chunk';
 export { ingestJobs, ingestStageEnum, ingestStatusEnum } from './ingest-job';

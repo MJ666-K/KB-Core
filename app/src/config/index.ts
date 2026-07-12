@@ -53,6 +53,14 @@ const envSchema = z.object({
   ossEndpoint: z.string().url().optional(),
   ossBucketName: z.string().min(1).optional(),
   ossPrefix: z.string().default('knowledge_core/'),
+
+  // ===== Knowledge Graph (Neo4j) =====
+  neo4jUrl: z.string().default('bolt://localhost:7687'),
+  neo4jUser: z.string().default('neo4j'),
+  neo4jPassword: z.string().default('neo4j_dev_password'),
+  kgEnabled: z.coerce.boolean().default(true),
+  kgDefaultRootLabor: z.string().default('flow_labor_apply'),
+  kgDefaultRootNeighbor: z.string().default('flow_neighbor_register'),
 }).transform((data) => ({
   ...data,
   ossEnabled: Boolean(
@@ -105,6 +113,13 @@ const rawEnv = {
   ossEndpoint: process.env.OSS_ENDPOINT,
   ossBucketName: process.env.OSS_BUCKET_NAME,
   ossPrefix: process.env.OSS_PREFIX,
+
+  neo4jUrl: process.env.NEO4J_URL,
+  neo4jUser: process.env.NEO4J_USER,
+  neo4jPassword: process.env.NEO4J_PASSWORD,
+  kgEnabled: process.env.KG_ENABLED,
+  kgDefaultRootLabor: process.env.KG_DEFAULT_ROOT_LABOR,
+  kgDefaultRootNeighbor: process.env.KG_DEFAULT_ROOT_NEIGHBOR,
 };
 
 const parsed = envSchema.safeParse(rawEnv);

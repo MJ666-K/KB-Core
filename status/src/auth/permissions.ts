@@ -47,6 +47,8 @@ export function hasPermission(userPermissions: readonly string[] | undefined, pe
 }
 
 export function hasAnyPermission(userPermissions: readonly string[] | undefined, permissions: Permission[]): boolean {
+  // 空数组 = 不要求任何权限 → 视为开放
+  if (!permissions || permissions.length === 0) return true;
   return permissions.some(p => hasPermission(userPermissions, p));
 }
 
@@ -59,6 +61,7 @@ export const ROUTE_ACCESS: Record<string, Permission[]> = {
   '/chat': ['chat:use'],
   '/settings': ['settings:manage'],
   '/users': ['users:manage', 'roles:manage'],
+  '/kg': [],
 };
 
 export function canAccessPath(userPermissions: readonly string[] | undefined, path: string): boolean {
