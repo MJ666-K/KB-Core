@@ -57,45 +57,145 @@ Agent（LLM 自主编排，主 Agent 可调度子 Agent）
 
 ## 项目结构
 
+整体为 **单体仓库**：后端 `app/`、前端 `status/`、部署 `deploy/`、文档 `docs/` + OpenSpec。
+
+后端采用 **三层 + 垂直切片**：
+
+```
+依赖方向（单向，禁止反向）：
+  entry → features → infra → core
+
+路径别名：
+  @core/*  @infra/*  @features/*  @entry/*
+```
+
 ```
 KB-Core/
-├── app/                    # 后端服务（Bun + Hono + Drizzle）
+├── AGENTS.md                 # AI Agent 工作规则（开工必读）
+├── PROJECT.md                # 项目入口：模块概览 / 技术栈 / API
+├── README.md                 # 本文件
+│
+├── app/                      # ── 后端（Bun + Hono + Drizzle）──
 │   ├── src/
-│   │   ├── core/           # ① 内核：跨业务共用（config / db / cache / redis / utils / shared）
-│   │   ├── infra/          # ② 平台基础设施：外部适配器（llm / embedding / storage / hooks / settings / auth）
-│   │   ├── features/       # ③ 业务能力（垂直切片，一等公民）
-│   │   │   ├── kb/         #   知识库核心：parser / splitter / retrieve / pipeline / tools / routes
-│   │   │   ├── chat/       #   查询链路：agent / ws / skills / tools / routes
-│   │   │   ├── excel/      #   Excel 分析：parser / tools / skills / analyze (DuckDB) / routes
-│   │   │   ├── kg/         #   知识图谱：client / ingest / seed / tools / routes
-│   │   │   └── admin/      #   管理后台 CRUD：routes（agents / models / skills / users / roles ...）
-│   │   └── entry/          # ④ 组装根：index.ts (HTTP) / worker.ts (BullMQ) / routes.ts (集中挂载)
-│   ├── tests/
-│   ├── docker-compose.yml  # 本地开发用 PG + Redis
+│   │   ├── core/             # ① 内核：跨业务共用，零业务依赖
+│   │   │   ├── config/       #   环境变量（zod 校验）
+│   │   │   ├── db/
+│   │   │   │   ├── client.ts           # Drizzle / PG 客户端
+│   │   │   │   ├── migrate.ts          # 启动时迁移
+│   │   │   │   ├── schema/             # 表定义
+│   │   │   │   │   ├── document.ts / chunk.ts / dataset.ts
+│   │   │   │   │   ├── agents.ts / skill-definitions.ts / models.ts
+│   │   │   │   │   ├── user.ts / role.ts / chat-session.ts
+│   │   │   │   │   ├── excel.ts / ingest-job.ts / query-log.ts
+│   │   │   │   │   └── agent-trace.ts
+│   │   │   │   ├── migrations/         # SQL 迁移 + meta/
+│   │   │   │   └── seed/               # 数据集 / 模型 / 角色 / Skill 种子
+│   │   │   ├── cache/        # TTL + LRU 缓存
+│   │   │   ├── redis/        # Redis 客户端
+│   │   │   ├── shared/       # 跨 feature 领域模型（如 Document）
+│   │   │   └── utils/        # hash / logger / text-normalize
+│   │   │
+│   │   ├── infra/            # ② 平台基础设施：外部适配器
+│   │   │   ├── llm/          #   LLM 封装（OpenAI 兼容）
+│   │   │   ├── embedding/    #   向量化服务
+│   │   │   ├── storage/      #   文档存储（本地 / OSS）
+│   │   │   ├── hooks/        #   横切拦截（审计 / 限流 / KG，异常隔离）
+│   │   │   ├── settings/     #   运行时热配置（effective-config / store）
+│   │   │   └── auth/         #   JWT / RBAC / 用户 / 角色 / query-job-store / routes
+│   │   │
+│   │   ├── features/         # ③ 业务能力（垂直切片，一等公民）
+│   │   │   ├── kb/           #   知识库核心
+│   │   │   │   ├── parser/         # 文档解析（txt / registry / base）
+│   │   │   │   ├── splitter/       # Recursive / Parent-Child / token / offsets
+│   │   │   │   ├── retrieve/       # dense / sparse / rrf / reranker / filter
+│   │   │   │   ├── pipeline/       # 入库流水线 / document-reset
+│   │   │   │   ├── tools/          # search_knowledge / get_chunk / get_document / …
+│   │   │   │   └── routes/         # datasets / documents / ingest
+│   │   │   │
+│   │   │   ├── chat/         #   查询与对话链路
+│   │   │   │   ├── agent/          # main-agent / query-agent / registry / system-prompt
+│   │   │   │   ├── skills/         # loader / registry / executor / follow-up
+│   │   │   │   │   └── builtin/    # qa / search / compare / summary / multihop /
+│   │   │   │   │                     # chat / followups / mediation-advisor（各含 SKILL.md）
+│   │   │   │   ├── tools/          # call-agent 等
+│   │   │   │   ├── ws/             # WebSocket 查询
+│   │   │   │   └── routes/         # chat / sessions / query-jobs
+│   │   │   │
+│   │   │   ├── excel/        #   Excel 智能分析
+│   │   │   │   ├── parser/         # Excel 流式解析 → 列画像
+│   │   │   │   ├── analyze/        # DuckDB 分析引擎
+│   │   │   │   ├── tools/          # query / profile / pivot / generate-code / …
+│   │   │   │   ├── skills/         # excel-analysis / excel-profiling（SKILL.md）
+│   │   │   │   └── routes/         # 上传 / 预览 / 查询 / 透视 / 报告
+│   │   │   │
+│   │   │   ├── kg/           #   知识图谱（Neo4j）
+│   │   │   │   ├── client.ts / ingest.ts / seed.ts
+│   │   │   │   ├── tools/          # search / neighbors / path / subgraph / …
+│   │   │   │   └── routes/
+│   │   │   │
+│   │   │   └── admin/        #   管理后台 API
+│   │   │       └── routes/         # agents / models / skills / skill-meta /
+│   │   │                             # users / roles / settings / stats
+│   │   │
+│   │   └── entry/            # ④ 组装根（唯一允许组装 DI 的地方）
+│   │       ├── index.ts      #   HTTP 主入口（Hono + WS + 启动迁移 / seed）
+│   │       ├── worker.ts     #   BullMQ 入库 Worker
+│   │       └── routes.ts     #   集中挂载 /api/* 路由
+│   │
+│   ├── data/                 # 运行时数据（gitignore 部分）
+│   │   ├── duckdb/           #   Excel DuckDB 库文件
+│   │   ├── excel-uploads/    #   上传的 Excel 原文件
+│   │   ├── kg-data.json      #   默认图谱种子
+│   │   └── settings.json     #   热配置落盘
+│   ├── tests/                # 单元 / 集成 / e2e / Excel / splitter 等
+│   ├── scripts/              # 辅助脚本
+│   ├── docker-compose.yml    # 本地：Postgres(pgvector) + Redis + Neo4j（端口映射到宿主机）
 │   ├── drizzle.config.ts
+│   ├── package.json
 │   └── .env.example
 │
-│   依赖方向单向：entry → features → infra → core
-│   跨模块 import 用路径别名：@core/* @infra/* @features/* @entry/*
-├── status/                 # 前端控制台（React + Antd + Vite）
+├── status/                   # ── 前端控制台（React 18 + Ant Design + Vite）──
 │   └── src/
-│       ├── pages/          # Dashboard / Chat / Agents / DocDetail
-│       ├── auth/           # 认证上下文 / 路由守卫 / 权限
-│       └── components/     # 角色管理 / 用户管理 / 权限组
-├── deploy/                 # 生产部署
-│   ├── Dockerfile          # 多阶段构建（前端 build → Bun 运行）
-│   ├── docker-compose.yml  # postgres + redis + app
-│   ├── build.sh            # 镜像构建
-│   └── deploy.sh           # 部署脚本
-├── data/                   # 示例数据（中国法律法规文本）
-├── docs/                   # 设计文档
-│   ├── 开发文档.md          # 开发唯一入口（Step 追踪 + 详细代码）
-│   ├── 知识库设计.md        # 架构设计
-│   └── 选型说明.md          # 技术选型理由
-├── openspec/               # 变更管理（add / change / changelog）
-├── PROJECT.md              # 项目入口
-└── AGENTS.md               # AI Agent 工作指南
+│       ├── pages/            # Dashboard / Chat / Documents / DocDetail /
+│       │                     # Agents / Skills / Models / Users / Settings /
+│       │                     # ExcelAnalysis / KnowledgeGraph / Login
+│       ├── components/       # 角色 / 用户 / 权限组等可复用组件
+│       ├── auth/             # 登录态 / 路由守卫 / 权限
+│       ├── api/ · api.ts     # 后端调用封装
+│       ├── theme/            # 主题与暗色模式
+│       ├── App.tsx           # 路由与布局
+│       └── main.tsx
+│
+├── deploy/                   # ── 生产部署 ──
+│   ├── Dockerfile            # 多阶段：前端 build → Bun 运行
+│   ├── docker-compose.yml    # postgres + redis + neo4j + app（库端口默认不暴露）
+│   ├── build.sh / deploy.sh
+│   ├── data/                 # 宿主机挂载数据目录
+│   └── README.md
+│
+├── docs/                     # 设计与开发文档
+│   ├── 开发文档.md            # 开发唯一入口（步骤总览 + 详细代码）
+│   ├── 知识库设计.md          # 架构设计
+│   ├── 知识图谱设计.md
+│   ├── Excel智能体设计.md
+│   ├── 选型说明.md
+│   └── 设计流程图说明.md
+│
+├── openspec/                 # 变更管理
+│   ├── add/                  # 新功能设计（实现前）
+│   ├── change/               # 架构级改动（如三层重构）
+│   └── changelog/            # 变更日志（与代码同批）
+│
+└── data/                     # 仓库级示例数据（法律法规文本等）
 ```
+
+**本地开发 vs 生产 compose 注意点**
+
+| | `app/docker-compose.yml` | `deploy/docker-compose.yml` |
+|--|--------------------------|-----------------------------|
+| 用途 | 本地 `bun run dev` | 一体化生产 / 联调镜像 |
+| PG / Redis 端口 | 映射到 `localhost:5432` / `6379` | **不映射**（仅容器网络内） |
+| 容器名 | 同为 `kc-postgres` 等 | 同名，**不要两套同时起** |
 
 ## 快速开始（本地开发）
 
