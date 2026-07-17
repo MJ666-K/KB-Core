@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { countTokens } from '../src/splitter/token-counter';
+import { countTokens } from '@features/kb/splitter/token-counter';
 
 describe('countTokens', () => {
   it('纯中文：约1.5字/token', () => {

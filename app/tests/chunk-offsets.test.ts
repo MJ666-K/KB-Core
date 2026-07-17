@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { computeChunkOffsets } from '../src/splitter/offsets';
+import { computeChunkOffsets } from '@features/kb/splitter/offsets';
 
 describe('computeChunkOffsets', () => {
   it('无 overlap 时顺序对齐', () => {

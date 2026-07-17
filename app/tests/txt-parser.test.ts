@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { mkdir, rm } from 'fs/promises';
-import { TxtParser } from '../src/parser/txt-parser';
+import { TxtParser } from '@features/kb/parser/txt-parser';
 
 const tmpDir = './tests/tmp';
 

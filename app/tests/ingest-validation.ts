@@ -10,10 +10,10 @@
  * 运行：bun tests/ingest-validation.ts
  */
 
-import { db } from '../src/db/client';
-import { documents, chunks } from '../src/db/schema';
+import { db } from '@core/db/client';
+import { documents, chunks } from '@core/db/schema';
 import { eq } from 'drizzle-orm';
-import { logger } from '../src/utils/logger';
+import { logger } from '@core/utils/logger';
 import { Glob } from 'bun';
 
 const API_URL = process.env.KB_API_URL ?? 'http://localhost:3000';

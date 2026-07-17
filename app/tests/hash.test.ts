@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { sha256 } from '../src/utils/hash';
+import { sha256 } from '@core/utils/hash';
 
 describe('sha256', () => {
   it('相同输入相同输出', () => {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test';
-import { RecursiveSplitter } from '../src/splitter/recursive-splitter';
-import { SEPARATOR_LEVELS } from '../src/splitter/separators';
-import { countTokens } from '../src/splitter/token-counter';
+import { RecursiveSplitter } from '@features/kb/splitter/recursive-splitter';
+import { SEPARATOR_LEVELS } from '@features/kb/splitter/separators';
+import { countTokens } from '@features/kb/splitter/token-counter';
 
 const defaultConfig = {
   maxChunkSize: 50, overlapSize: 10, minChunkSize: 15,

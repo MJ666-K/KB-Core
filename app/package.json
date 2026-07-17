@@ -1,13 +1,13 @@
 {
   "name": "knowledge-core",
   "author": "2212013739@qq.com",
-  "module": "src/index.ts",
+  "module": "src/entry/index.ts",
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "bun --watch src/index.ts",
-    "start": "bun src/index.ts",
-    "worker": "bun src/pipeline/queue.ts",
+    "dev": "bun --watch src/entry/index.ts",
+    "start": "bun src/entry/index.ts",
+    "worker": "bun src/entry/worker.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",

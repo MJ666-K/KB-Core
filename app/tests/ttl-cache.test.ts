@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { TTLCache } from '../src/cache/ttl-cache';
+import { TTLCache } from '@core/cache/ttl-cache';
 
 describe('TTLCache', () => {
   it('TTL 基本功能', () => {

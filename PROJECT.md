@@ -51,31 +51,49 @@ Agent（LLM 自主编排，主 Agent 可调度多个子 Agent）
 
 Agent Loop 支持三种终止路径：命中 Skill、综合合成、直接回答。
 
-## 后端模块（`app/src/`）
+## 后端模块（`app/src/`，三层分组 + 垂直特性切片）
+
+依赖方向单向：`entry → features → infra → core`。跨模块 import 使用路径别名 `@core/* / @infra/* / @features/* / @entry/*`。
+
+### ① core/（内核：跨业务共用，零业务依赖）
 
 | 模块 | 路径 | 职责 |
 |------|------|------|
-| 配置 | `config/` | zod 校验，env 加载 |
-| 缓存 | `cache/` | TTL + LRU，避免重复计算 |
-| 数据库 | `db/` | Drizzle Schema + Client + 迁移/种子 |
-| 解析 | `parser/` | PDF / Markdown / 纯文本解析 |
-| 切分 | `splitter/` | Recursive + ParentChild 策略 |
-| 嵌入 | `embedding/` | 文本向量化（OpenAI 兼容） |
-| LLM | `llm/` | LLM 调用封装 |
-| 检索 | `retrieve/` | Dense + Sparse + Rerank + RRF 融合 |
-| Tools | `tools/` | 原子操作（search / add_doc / delete_doc / list_docs / get_chunk …） |
-| Skills | `skills/` | SKILL.md 驱动的任务编排 |
-| Agent | `agent/` | MainAgent + QueryAgent（Tool/Skill/Direct 三种终止） |
-| Hooks | `hooks/` | 横切拦截（日志、指标、过滤） |
-| Pipeline | `pipeline/` | BullMQ 入库流水线 |
-| 路由 | `routes/` | HTTP 路由（见下） |
-| WebSocket | `ws/` | 流式检索问答 |
-| 认证 | `auth/` | JWT 中间件 |
-| Redis | `redis/` | Redis 客户端 |
-| 存储 | `storage/` | 文档存储（本地 / OSS 抽象） |
-| 运行时配置 | `settings/` | 热更新设置 |
-| 模型 | `models/` | 领域模型 |
-| 工具函数 | `utils/` | 日志等通用工具 |
+| 配置 | `core/config/` | zod 校验，env 加载 |
+| 数据库 | `core/db/` | Drizzle Schema + Client + 迁移/种子 |
+| 缓存 | `core/cache/` | TTL + LRU |
+| Redis | `core/redis/` | Redis 客户端 |
+| 共享类型 | `core/shared/` | 跨 feature 的领域模型与类型（Citation / AgentStep 等）|
+| 工具函数 | `core/utils/` | hash / logger / text-normalize |
+
+### ② infra/（平台基础设施：外部适配器）
+
+| 模块 | 路径 | 职责 |
+|------|------|------|
+| LLM | `infra/llm/` | LLM 调用封装（chat / stream / generate）|
+| 嵌入 | `infra/embedding/` | 文本向量化（OpenAI 兼容）|
+| 存储 | `infra/storage/` | 文档存储（本地 / OSS 抽象）|
+| Hooks | `infra/hooks/` | 横切拦截（audit / rate-limit，异常隔离）|
+| 运行时配置 | `infra/settings/` | 热更新设置 |
+| 认证 | `infra/auth/` | JWT + RBAC + query-job-store |
+
+### ③ features/（业务能力：垂直切片，一等公民）
+
+| Feature | 路径 | 内含 |
+|---------|------|------|
+| 知识库核心 | `features/kb/` | parser / splitter / retrieve / pipeline / tools（search·get·list·summarize）/ routes（ingest·documents·datasets）|
+| 查询链路 | `features/chat/` | agent（Main + Query + SubAgentRegistry）/ ws / skills（基础设施 + builtin: qa·search·compare·summary·multihop·chat·followups·mediation）/ tools（call-agent）/ routes（chat·sessions·query-jobs）|
+| Excel 分析 | `features/excel/` | parser / tools（4 个）/ skills（excel-analysis·excel-profiling）/ analyze（DuckDB）/ routes |
+| 知识图谱 | `features/kg/` | client / ingest / seed / tools / routes |
+| 管理后台 | `features/admin/` | routes（agents·models·skills·skill-meta·settings·users·roles·stats）|
+
+### ④ entry/（组装根）
+
+| 文件 | 职责 |
+|------|------|
+| `entry/index.ts` | HTTP 主入口（Hono + WS + 静态前端 + DI 组装）|
+| `entry/worker.ts` | BullMQ Worker 入口（入库任务）|
+| `entry/routes.ts` | 集中路由挂载（按 feature 注册）|
 
 ## 前端模块（`status/src/`）
 
@@ -89,8 +107,9 @@ Agent Loop 支持三种终止路径：命中 Skill、综合合成、直接回答
 
 | 文件 | 用途 |
 |------|------|
-| `app/src/index.ts` | HTTP 主服务（Hono + WS + 静态前端） |
-| `app/src/pipeline/queue.ts` | BullMQ Worker（入库任务） |
+| `app/src/entry/index.ts` | HTTP 主服务（Hono + WS + 静态前端 + DI 组装） |
+| `app/src/entry/worker.ts` | BullMQ Worker（入库任务） |
+| `app/src/entry/routes.ts` | 集中按 feature 挂载路由 |
 | `status/src/main.tsx` | 前端入口 |
 
 ## 对外 API

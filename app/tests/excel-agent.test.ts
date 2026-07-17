@@ -6,8 +6,8 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
-import { ExcelParser } from '../src/parser/excel-parser';
-import { DuckDBService } from '../src/analyze/duckdb-service';
+import { ExcelParser } from '@features/excel/parser/excel-parser';
+import { DuckDBService } from '@features/excel/analyze/duckdb-service';
 import { existsSync, unlinkSync, readdirSync, rmdirSync } from 'fs';
 import { join } from 'path';
 

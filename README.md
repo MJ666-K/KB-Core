@@ -61,32 +61,22 @@ Agent（LLM 自主编排，主 Agent 可调度子 Agent）
 KB-Core/
 ├── app/                    # 后端服务（Bun + Hono + Drizzle）
 │   ├── src/
-│   │   ├── index.ts        # HTTP 主入口
-│   │   ├── config/         # zod 校验的环境配置
-│   │   ├── cache/          # TTL + LRU 缓存
-│   │   ├── db/             # Drizzle Schema + 迁移
-│   │   ├── parser/         # 文件解析
-│   │   ├── splitter/       # 文本切分
-│   │   ├── embedding/      # 向量化
-│   │   ├── llm/            # LLM 调用封装
-│   │   ├── retrieve/       # 混合检索 + RRF + Rerank
-│   │   ├── tools/          # 原子操作（search / add_doc / delete_doc / list_docs / get_chunk …）
-│   │   ├── skills/         # SKILL.md 驱动的任务编排
-│   │   ├── agent/          # MainAgent + QueryAgent（自主编排 Loop）
-│   │   ├── hooks/          # 横切拦截（日志 / 指标 / 过滤）
-│   │   ├── pipeline/       # BullMQ 入库流水线
-│   │   ├── routes/         # HTTP 路由
-│   │   ├── ws/             # WebSocket 流式问答
-│   │   ├── auth/           # JWT 认证中间件
-│   │   ├── redis/          # Redis 客户端
-│   │   ├── storage/        # 文档存储（本地 / OSS）
-│   │   ├── settings/       # 运行时配置（热更新）
-│   │   ├── models/         # 领域模型
-│   │   └── utils/          # 工具函数
+│   │   ├── core/           # ① 内核：跨业务共用（config / db / cache / redis / utils / shared）
+│   │   ├── infra/          # ② 平台基础设施：外部适配器（llm / embedding / storage / hooks / settings / auth）
+│   │   ├── features/       # ③ 业务能力（垂直切片，一等公民）
+│   │   │   ├── kb/         #   知识库核心：parser / splitter / retrieve / pipeline / tools / routes
+│   │   │   ├── chat/       #   查询链路：agent / ws / skills / tools / routes
+│   │   │   ├── excel/      #   Excel 分析：parser / tools / skills / analyze (DuckDB) / routes
+│   │   │   ├── kg/         #   知识图谱：client / ingest / seed / tools / routes
+│   │   │   └── admin/      #   管理后台 CRUD：routes（agents / models / skills / users / roles ...）
+│   │   └── entry/          # ④ 组装根：index.ts (HTTP) / worker.ts (BullMQ) / routes.ts (集中挂载)
 │   ├── tests/
 │   ├── docker-compose.yml  # 本地开发用 PG + Redis
 │   ├── drizzle.config.ts
 │   └── .env.example
+│
+│   依赖方向单向：entry → features → infra → core
+│   跨模块 import 用路径别名：@core/* @infra/* @features/* @entry/*
 ├── status/                 # 前端控制台（React + Antd + Vite）
 │   └── src/
 │       ├── pages/          # Dashboard / Chat / Agents / DocDetail

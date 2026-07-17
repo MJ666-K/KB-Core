@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { extractSearchTerms } from '../src/retrieve/sparse-terms';
+import { extractSearchTerms } from '@features/kb/retrieve/sparse-terms';
 
 describe('extractSearchTerms', () => {
   it('提取中文法律关键词', () => {

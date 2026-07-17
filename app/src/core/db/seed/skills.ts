@@ -5,7 +5,11 @@ import { skillDefinitions } from '../schema';
 import { parse as parseYaml } from 'yaml';
 import { logger } from '@core/utils/logger';
 
-const SKILLS_DIR = join(import.meta.dir, '..', '..', 'skills');
+/** 三层结构后 Skill 分布在各 feature 下，不再集中于 src/skills */
+const SKILL_DIRS = [
+  join(import.meta.dir, '../../../features/chat/skills/builtin'),
+  join(import.meta.dir, '../../../features/excel/skills'),
+];
 
 interface ParsedSkill {
   name: string;
@@ -25,6 +29,8 @@ const SKILL_DISPLAY_NAMES: Record<string, string> = {
   summary: '要点总结',
   followups: '推荐追问',
   'mediation-advisor': '调解业务问答',
+  excel_analysis: 'Excel 智能分析',
+  excel_profiling: 'Excel 数据画像',
 };
 
 async function parseSkillMdFile(skillDir: string): Promise<ParsedSkill | null> {
@@ -58,25 +64,34 @@ async function parseSkillMdFile(skillDir: string): Promise<ParsedSkill | null> {
   };
 }
 
-/** 从 skills 目录下的 SKILL.md 同步到 DB（幂等，不覆盖已有配置） */
+/** 从各 feature 的 skills 目录同步 SKILL.md 到 DB（幂等，不覆盖已有配置） */
 export async function seedSkillsFromFiles(): Promise<number> {
-  const entries = await readdir(SKILLS_DIR, { withFileTypes: true });
   let inserted = 0;
 
-  for (const entry of entries) {
-    if (!entry.isDirectory() || entry.name === 'node_modules') continue;
-    const skill = await parseSkillMdFile(join(SKILLS_DIR, entry.name));
-    if (!skill) continue;
+  for (const skillsDir of SKILL_DIRS) {
+    let entries;
+    try {
+      entries = await readdir(skillsDir, { withFileTypes: true });
+    } catch (err) {
+      logger.warn(`[Seed] skills dir missing, skip: ${skillsDir}`, err);
+      continue;
+    }
 
-    await db.insert(skillDefinitions).values({
-      name: skill.name,
-      displayName: skill.displayName,
-      description: skill.description,
-      tools: skill.tools,
-      parameters: skill.parameters,
-      instructions: skill.instructions,
-    }).onConflictDoNothing();
-    inserted++;
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name === 'node_modules') continue;
+      const skill = await parseSkillMdFile(join(skillsDir, entry.name));
+      if (!skill) continue;
+
+      await db.insert(skillDefinitions).values({
+        name: skill.name,
+        displayName: skill.displayName,
+        description: skill.description,
+        tools: skill.tools,
+        parameters: skill.parameters,
+        instructions: skill.instructions,
+      }).onConflictDoNothing();
+      inserted++;
+    }
   }
 
   logger.info(`[Seed] skills synced from files (${inserted} new)`);

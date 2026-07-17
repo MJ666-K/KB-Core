@@ -91,25 +91,34 @@ docs/
 ├── 选型说明.md          ← 技术选型理由
 └── 开发文档.legacy.md   ← 旧版备份（可删）
 
-src/
-├── index.ts             # 主入口
-├── config/              # 配置（zod 校验）
-├── db/                  # 数据库（Drizzle）
-│   ├── client.ts
-│   └── schema/
-├── parser/              # 文件解析
-├── splitter/            # 文本切分
-├── embedding/           # 向量化
-├── retrieve/            # 检索（dense+sparse+rerank）
-├── llm/                 # LLM 封装
-├── tools/               # Tool 层（原子操作）
-├── skills/              # Skill 层（任务编排）
-├── agent/               # Agent 层（LLM 自主编排）
-├── hooks/               # 横切拦截
-├── pipeline/            # 入库流水线
-├── cache/               # 缓存
-├── utils/               # 工具函数
-└── models/              # 领域模型
+app/src/                       # 后端源码（三层分组 + 垂直特性切片）
+├── core/                  # ① 内核：跨业务共用，零业务依赖
+│   ├── config/            # 配置（zod 校验）
+│   ├── db/                # 数据库（Drizzle）：client / schema / migrations / seed
+│   ├── cache/             # TTL + LRU 缓存
+│   ├── redis/             # Redis 客户端
+│   ├── shared/            # 跨 feature 的领域模型与共享类型
+│   └── utils/             # hash / logger / text-normalize
+├── infra/                 # ② 平台基础设施：外部适配器
+│   ├── llm/               # LLM 封装
+│   ├── embedding/         # 向量化
+│   ├── storage/           # 文档存储（本地 / OSS）
+│   ├── hooks/             # 横切拦截（异常隔离）
+│   ├── settings/          # 运行时热配置
+│   └── auth/              # JWT + RBAC + query-job-store
+├── features/              # ③ 业务能力（垂直切片，一等公民）
+│   ├── kb/                #   知识库核心：parser / splitter / retrieve / pipeline / tools / routes
+│   ├── chat/              #   查询链路：agent / ws / skills(+builtin) / tools / routes
+│   ├── excel/             #   Excel：parser / tools / skills / analyze(DuckDB) / routes
+│   ├── kg/                #   知识图谱：client / ingest / seed / tools / routes
+│   └── admin/             #   管理后台：routes（agents / models / skills / users / roles ...）
+└── entry/                 # ④ 组装根
+    ├── index.ts           #   HTTP 主入口（Hono + WS + DI 组装）
+    ├── worker.ts          #   BullMQ Worker 入口
+    └── routes.ts          #   集中路由挂载
+
+依赖方向单向：entry → features → infra → core
+跨模块 import 用路径别名：@core/* @infra/* @features/* @entry/*
 
 tests/                   # 测试（每个模块一个 .test.ts）
 ```

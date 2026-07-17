@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'bun:test';
-import { ParentChildSplitter } from '../src/splitter/parent-child-splitter';
-import { RecursiveSplitter } from '../src/splitter/recursive-splitter';
-import { SEPARATOR_LEVELS } from '../src/splitter/separators';
-import { countTokens } from '../src/splitter/token-counter';
+import { ParentChildSplitter } from '@features/kb/splitter/parent-child-splitter';
+import { RecursiveSplitter } from '@features/kb/splitter/recursive-splitter';
+import { SEPARATOR_LEVELS } from '@features/kb/splitter/separators';
+import { countTokens } from '@features/kb/splitter/token-counter';
 
 const parentConfig = {
   maxChunkSize: 400, overlapSize: 30, minChunkSize: 25,

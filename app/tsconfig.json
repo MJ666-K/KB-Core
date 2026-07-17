@@ -10,6 +10,13 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@core/*": ["./src/core/*"],
+      "@infra/*": ["./src/infra/*"],
+      "@features/*": ["./src/features/*"],
+      "@entry/*": ["./src/entry/*"]
+    },
     "outDir": "./dist",
     "rootDir": ".",
     "declaration": true,

@@ -9,8 +9,8 @@
  * 用法：bun run tests/excel-pivot-demo.ts
  */
 
-import { ExcelParser } from '../src/parser/excel-parser';
-import { DuckDBService } from '../src/analyze/duckdb-service';
+import { ExcelParser } from '@features/excel/parser/excel-parser';
+import { DuckDBService } from '@features/excel/analyze/duckdb-service';
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 

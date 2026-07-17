@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
-import { applyRerankFilter, buildRerankFilterLog, formatRerankFilterDocs } from '../src/retrieve/filter';
-import type { RerankCandidate } from '../src/retrieve/reranker';
+import { applyRerankFilter, buildRerankFilterLog, formatRerankFilterDocs } from '@features/kb/retrieve/filter';
+import type { RerankCandidate } from '@features/kb/retrieve/reranker';
 
 const mk = (id: string, score: number): RerankCandidate => ({
   chunkId: id,

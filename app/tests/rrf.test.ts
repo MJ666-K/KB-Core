@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { rrfFusion } from '../src/retrieve/rrf';
+import { rrfFusion } from '@features/kb/retrieve/rrf';
 
 describe('rrfFusion', () => {
   it('两个列表都排前列的文档得分最高', () => {
