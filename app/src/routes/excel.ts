@@ -1,52 +1,22 @@
 import { Hono } from 'hono';
-import { mkdirSync, existsSync, unlinkSync } from 'fs';
+import { streamSSE } from 'hono/streaming';
+import { mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { ExcelParser } from '../parser/excel-parser';
 import { getDuckDBService } from '../analyze/duckdb-service';
 import { db } from '../db/client';
 import { excelProfiles, pivotTables, excelReports } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
+import { queryExcelTool } from '../tools/excel/query-excel';
+import { generateCodeTool } from '../tools/excel/generate-code';
+import { logger } from '../utils/logger';
 import { LLMService } from '../llm/llm-service';
 
 const app = new Hono();
 const UPLOAD_DIR = './data/excel-uploads';
-const DUCKDB_DIR = './data/duckdb';
 
 if (!existsSync(UPLOAD_DIR)) {
   mkdirSync(UPLOAD_DIR, { recursive: true });
-}
-
-const llm = new LLMService();
-
-type ProfileSheet = {
-  sheetName: string;
-  rowCount: number;
-  documentId?: string;
-  columns: Array<{ name: string; type: string; uniqueCount?: number }>;
-  duckdbTable: string;
-  sampleData?: Record<string, unknown>[];
-};
-
-async function clearAnalysisArtifacts(profileId: string): Promise<void> {
-  await db.delete(pivotTables).where(eq(pivotTables.profileId, profileId));
-  await db.delete(excelReports).where(eq(excelReports.profileId, profileId));
-}
-
-async function removeDuckDbForDocuments(documentIds: string[]): Promise<void> {
-  const duckdb = getDuckDBService();
-  for (const docId of documentIds) {
-    const dbPath = `excel_${docId.replace(/-/g, '')}.duckdb`;
-    await duckdb.close(dbPath);
-    const fullPath = join(DUCKDB_DIR, dbPath);
-    if (existsSync(fullPath)) unlinkSync(fullPath);
-  }
-}
-
-async function getProfileOr404(profileId: string) {
-  const profile = await db.query.excelProfiles.findFirst({
-    where: eq(excelProfiles.id, profileId),
-  });
-  return profile ?? null;
 }
 
 // 获取历史分析列表
@@ -67,7 +37,7 @@ app.get('/list', async (c) => {
 
     return c.json({ success: true, list });
   } catch (err) {
-    console.error('[Excel] 获取列表失败:', err);
+    logger.error('[Excel] 获取列表失败:', err);
     return c.json({ error: '获取列表失败', success: false }, 500);
   }
 });
@@ -83,16 +53,16 @@ app.post('/upload', async (c) => {
     }
 
     const fileName = file.name;
-    console.log(`[Excel] 开始上传: ${fileName}`);
+    logger.info(`[Excel] 开始上传: ${fileName}`);
     
     const filePath = join(UPLOAD_DIR, `${Date.now()}-${fileName}`);
     const buffer = await file.arrayBuffer();
     await Bun.write(filePath, buffer);
 
-    console.log(`[Excel] 文件已保存: ${filePath}`);
+    logger.info(`[Excel] 文件已保存: ${filePath}`);
 
     // 解析 Excel
-    console.log(`[Excel] 步骤 1: 解析 Excel 文件...`);
+    logger.info(`[Excel] 步骤 1: 解析 Excel 文件...`);
     const duckdb = getDuckDBService();
     await duckdb.init();
     const parser = new ExcelParser(duckdb);
@@ -100,7 +70,7 @@ app.post('/upload', async (c) => {
     const dbPath = `excel_${documentId.replace(/-/g, '')}.duckdb`;
 
     const result = await parser.parse(filePath, documentId, fileName, dbPath);
-    console.log(`[Excel] 解析完成: ${result.totalRows} 行, ${result.sheets.length} 个 Sheet`);
+    logger.info(`[Excel] 解析完成: ${result.totalRows} 行, ${result.sheets.length} 个 Sheet`);
 
     // 保存 Profile
     const profileId = crypto.randomUUID();
@@ -112,17 +82,17 @@ app.post('/upload', async (c) => {
       sheets: result.sheets,
       merged: false,
     });
-    console.log(`[Excel] 步骤 2: Profile 已保存: ${profileId}`);
+    logger.info(`[Excel] 步骤 2: Profile 已保存: ${profileId}`);
 
     // 自动生成透视表
-    console.log(`[Excel] 步骤 3: 自动生成透视表...`);
+    logger.info(`[Excel] 步骤 3: 自动生成透视表...`);
     const pivots = await generatePivots(profileId, result.sheets, documentId, dbPath);
-    console.log(`[Excel] 透视表生成完成: ${pivots.length} 个`);
+    logger.info(`[Excel] 透视表生成完成: ${pivots.length} 个`);
 
     // 自动生成分析报告
-    console.log(`[Excel] 步骤 4: 生成分析报告...`);
+    logger.info(`[Excel] 步骤 4: 生成分析报告...`);
     const report = await generateReport(profileId, fileName, result.sheets, pivots);
-    console.log(`[Excel] 分析报告生成完成`);
+    logger.info(`[Excel] 分析报告生成完成`);
 
     return c.json({
       success: true,
@@ -136,7 +106,7 @@ app.post('/upload', async (c) => {
     });
 
   } catch (err) {
-    console.error('[Excel] 上传失败:', err);
+    logger.error('[Excel] 上传失败:', err);
     return c.json({ 
       error: err instanceof Error ? err.message : '上传失败',
       success: false,
@@ -173,335 +143,318 @@ app.get('/result/:id', async (c) => {
     });
 
   } catch (err) {
-    console.error('[Excel] 获取结果失败:', err);
+    logger.error('[Excel] 获取结果失败:', err);
     return c.json({ error: '获取结果失败', success: false }, 500);
   }
 });
 
 // 数据预览
 app.get('/preview/:id', async (c) => {
-  try {
-    const profileId = c.req.param('id');
-    const limit = Math.min(Math.max(Number(c.req.query('limit') || '100'), 1), 500);
-    const offset = Math.max(Number(c.req.query('offset') || '0'), 0);
-    const sheetIndex = Math.max(Number(c.req.query('sheet') || '0'), 0);
+  const profileId = c.req.param('id');
+  const limit = Number(c.req.query('limit') || '100');
+  
+  const profile = await db.query.excelProfiles.findFirst({
+    where: eq(excelProfiles.id, profileId),
+  });
 
-    const profile = await db.query.excelProfiles.findFirst({
-      where: eq(excelProfiles.id, profileId),
-    });
-
-    if (!profile) {
-      return c.json({ success: false, error: 'Profile not found' }, 404);
-    }
-
-    const sheets = profile.sheets as Array<{
-      duckdbTable: string;
-      documentId?: string;
-      rowCount?: number;
-      sampleData?: Record<string, unknown>[];
-    }>;
-    const sheet = sheets[sheetIndex] ?? sheets[0];
-    if (!sheet) {
-      return c.json({ success: true, rows: [], rowCount: 0 });
-    }
-
-    const documentId = sheet.documentId ?? profile.documentIds[0];
-    const sampleFallback = sheet.sampleData ?? [];
-
-    if (!documentId || !sheet.duckdbTable) {
-      const rows = sampleFallback.slice(offset, offset + limit);
-      return c.json({
-        success: true,
-        rows,
-        rowCount: rows.length,
-        totalRows: sheet.rowCount ?? sampleFallback.length,
-        fallback: true,
-      });
-    }
-
-    const dbPath = `excel_${documentId.replace(/-/g, '')}.duckdb`;
-    const duckdb = getDuckDBService();
-    const conn = await duckdb.getConnection(dbPath);
-    const totalRows = sheet.rowCount ?? Number(
-      (await duckdb.executeQuery(conn, `SELECT COUNT(*) AS cnt FROM "${sheet.duckdbTable}"`)).rows[0]?.cnt ?? 0,
-    );
-    const result = await duckdb.executeQuery(
-      conn,
-      `SELECT * FROM "${sheet.duckdbTable}" LIMIT ${limit} OFFSET ${offset}`,
-    );
-
-    return c.json({
-      success: true,
-      rows: result.rows,
-      rowCount: result.rowCount,
-      totalRows,
-      offset,
-      limit,
-    });
-  } catch (err) {
-    console.error('[Excel] 预览失败:', err);
-    try {
-      const profileId = c.req.param('id');
-      const sheetIndex = Math.max(Number(c.req.query('sheet') || '0'), 0);
-      const profile = await db.query.excelProfiles.findFirst({
-        where: eq(excelProfiles.id, profileId),
-      });
-      const sheets = profile?.sheets as Array<{ sampleData?: Record<string, unknown>[] }> | undefined;
-      const sampleFallback = sheets?.[sheetIndex]?.sampleData ?? sheets?.[0]?.sampleData ?? [];
-      const sheetMeta = sheets?.[sheetIndex] ?? sheets?.[0];
-      if (sampleFallback.length > 0) {
-        const limit = Math.min(Math.max(Number(c.req.query('limit') || '100'), 1), 500);
-        const offset = Math.max(Number(c.req.query('offset') || '0'), 0);
-        const rows = sampleFallback.slice(offset, offset + limit);
-        return c.json({
-          success: true,
-          rows,
-          rowCount: rows.length,
-          totalRows: sheetMeta?.rowCount ?? sampleFallback.length,
-          fallback: true,
-        });
-      }
-    } catch {
-      // ignore secondary failure
-    }
-    return c.json({
-      success: false,
-      error: err instanceof Error ? err.message : '预览失败',
-      rows: [],
-      rowCount: 0,
-    }, 500);
+  if (!profile) {
+    return c.json({ error: 'Profile not found' }, 404);
   }
+
+  const sheets = profile.sheets as Array<{ duckdbTable: string; documentId: string }>;
+  const tableName = sheets[0]!.duckdbTable;
+  const dbPath = `excel_${sheets[0]!.documentId.replace(/-/g, '')}.duckdb`;
+  
+  const duckdb = getDuckDBService();
+  const conn = await duckdb.getConnection(dbPath);
+  
+  const result = await duckdb.executeQuery(conn, 
+    `SELECT * FROM "${tableName}" LIMIT ${limit}`
+  );
+
+  return c.json({
+    rows: result.rows,
+    rowCount: result.rowCount,
+  });
 });
 
-// 重命名工作簿显示名
-app.patch('/:id', async (c) => {
-  try {
-    const profileId = c.req.param('id');
-    const body = await c.req.json() as { fileName?: string };
-    const fileName = body.fileName?.trim();
-    if (!fileName) {
-      return c.json({ success: false, error: '文件名不能为空' }, 400);
-    }
-    const profile = await getProfileOr404(profileId);
-    if (!profile) {
-      return c.json({ success: false, error: 'Profile not found' }, 404);
-    }
-    await db.update(excelProfiles)
-      .set({ fileNames: [fileName] })
-      .where(eq(excelProfiles.id, profileId));
-    return c.json({ success: true, fileName });
-  } catch (err) {
-    console.error('[Excel] 重命名失败:', err);
-    return c.json({ success: false, error: '重命名失败' }, 500);
-  }
-});
-
-// 删除工作簿及分析数据
-app.delete('/:id', async (c) => {
-  try {
-    const profileId = c.req.param('id');
-    const profile = await getProfileOr404(profileId);
-    if (!profile) {
-      return c.json({ success: false, error: 'Profile not found' }, 404);
-    }
-    await clearAnalysisArtifacts(profileId);
-    await db.delete(excelProfiles).where(eq(excelProfiles.id, profileId));
-    await removeDuckDbForDocuments(profile.documentIds);
-    return c.json({ success: true });
-  } catch (err) {
-    console.error('[Excel] 删除失败:', err);
-    return c.json({ success: false, error: '删除失败' }, 500);
-  }
-});
-
-// 基于现有数据重新生成透视表与报告
-app.post('/:id/reanalyze', async (c) => {
-  try {
-    const profileId = c.req.param('id');
-    const profile = await getProfileOr404(profileId);
-    if (!profile) {
-      return c.json({ success: false, error: 'Profile not found' }, 404);
-    }
-    const sheets = profile.sheets as ProfileSheet[];
-    const sheet = sheets[0];
-    if (!sheet) {
-      return c.json({ success: false, error: '无可用工作表' }, 400);
-    }
-    const documentId = sheet.documentId ?? profile.documentIds[0];
-    if (!documentId) {
-      return c.json({ success: false, error: '数据文件不存在' }, 400);
-    }
-    const dbPath = `excel_${documentId.replace(/-/g, '')}.duckdb`;
-    await clearAnalysisArtifacts(profileId);
-    const pivots = await generatePivots(profileId, sheets, documentId, dbPath);
-    const report = await generateReport(profileId, profile.fileNames[0] ?? '工作簿', sheets, pivots);
-    return c.json({ success: true, pivots, report });
-  } catch (err) {
-    console.error('[Excel] 重新分析失败:', err);
-    return c.json({
-      success: false,
-      error: err instanceof Error ? err.message : '重新分析失败',
-    }, 500);
-  }
-});
-
-// 替换工作簿文件并重新分析
-app.post('/:id/replace', async (c) => {
-  try {
-    const profileId = c.req.param('id');
-    const profile = await getProfileOr404(profileId);
-    if (!profile) {
-      return c.json({ success: false, error: 'Profile not found' }, 404);
-    }
-
-    const body = await c.req.parseBody();
-    const file = body['file'];
-    if (!file || !(file instanceof File)) {
-      return c.json({ success: false, error: '请上传文件' }, 400);
-    }
-
-    const fileName = file.name;
-    const filePath = join(UPLOAD_DIR, `${Date.now()}-${fileName}`);
-    const buffer = await file.arrayBuffer();
-    await Bun.write(filePath, buffer);
-
-    await removeDuckDbForDocuments(profile.documentIds);
-
-    const duckdb = getDuckDBService();
-    await duckdb.init();
-    const parser = new ExcelParser(duckdb);
-    const documentId = crypto.randomUUID();
-    const dbPath = `excel_${documentId.replace(/-/g, '')}.duckdb`;
-    const result = await parser.parse(filePath, documentId, fileName, dbPath);
-
-    await clearAnalysisArtifacts(profileId);
-    await db.update(excelProfiles)
-      .set({
-        documentIds: [documentId],
-        fileNames: [fileName],
-        fileCount: 1,
-        sheets: result.sheets,
-        merged: false,
-        mergedDuckdbTable: null,
-      })
-      .where(eq(excelProfiles.id, profileId));
-
-    const pivots = await generatePivots(profileId, result.sheets, documentId, dbPath);
-    const report = await generateReport(profileId, fileName, result.sheets, pivots);
-
-    return c.json({
-      success: true,
-      fileName,
-      totalRows: result.totalRows,
-      sheets: result.sheets,
-      pivots,
-      report,
-    });
-  } catch (err) {
-    console.error('[Excel] 替换文件失败:', err);
-    return c.json({
-      success: false,
-      error: err instanceof Error ? err.message : '替换文件失败',
-    }, 500);
-  }
-});
-
-// 自然语言查询（追问）
+// 自然语言查询（使用 query_excel Tool）
 app.post('/query', async (c) => {
   try {
-    const { profileId, question } = await c.req.json();
+    const { profileId, question, useCode } = await c.req.json();
     
     if (!profileId || !question) {
       return c.json({ error: '缺少参数' }, 400);
     }
 
-    console.log(`[Excel Query] 问题: ${question}`);
+    logger.info(`[Excel Query] 问题: ${question}`);
 
-    const profile = await db.query.excelProfiles.findFirst({
-      where: eq(excelProfiles.id, profileId),
-    });
+    if (useCode) {
+      // 使用代码生成
+      const result = await generateCodeTool.execute(
+        { profileId, question },
+        { datasetId: '', datasetIds: [] }
+      );
 
-    if (!profile) {
-      return c.json({ error: 'Profile not found' }, 404);
+      if (!result.success) {
+        return c.json({ success: false, error: result.error });
+      }
+
+      return c.json({
+        success: true,
+        code: result.code,
+        output: result.output,
+      });
+    } else {
+      // 使用 SQL 查询
+      const result = await queryExcelTool.execute(
+        { profileId, question },
+        { datasetId: '', datasetIds: [] }
+      );
+
+      if (!result.success) {
+        return c.json({ success: false, error: result.error });
+      }
+
+      return c.json({
+        success: true,
+        sql: result.sql,
+        rows: result.rows,
+        rowCount: result.rowCount,
+        explanation: result.explanation,
+      });
     }
-
-    const sheets = profile.sheets as Array<{ 
-      duckdbTable: string; 
-      documentId?: string;
-      columns: Array<{ name: string; type: string }>;
-    }>;
-    
-    const sheet = sheets[0];
-    if (!sheet) {
-      return c.json({ error: '无可用工作表', success: false }, 400);
-    }
-
-    const documentId = sheet.documentId ?? profile.documentIds[0];
-    if (!documentId) {
-      return c.json({ error: '数据文件不存在', success: false }, 400);
-    }
-
-    const tableName = sheet.duckdbTable;
-    const columns = sheet.columns;
-    const dbPath = `excel_${documentId.replace(/-/g, '')}.duckdb`;
-    
-    const schemaDesc = columns.map(c => `- ${c.name} (${c.type})`).join('\n');
-    
-    const prompt = `你是一个数据分析助手。用户会提问关于 Excel 数据的问题，你需要：
-1. 将自然语言转换为 SQL 查询
-2. 返回 SQL 语句
-
-Excel 表结构：
-表名: ${tableName}
-列信息:
-${schemaDesc}
-
-用户问题: ${question}
-
-请只返回 SQL 语句，不要其他解释。SQL 应该是 DuckDB 兼容的。`;
-
-    console.log(`[Excel Query] 调用 LLM 生成 SQL...`);
-    const llmResponse = await llm.chat({
-      messages: [{
-        role: 'user',
-        content: prompt,
-      }],
-    });
-
-    let sql = llmResponse.content || '';
-    sql = sql.replace(/```sql\n?/g, '').replace(/```\n?/g, '').trim();
-    
-    console.log(`[Excel Query] 生成的 SQL: ${sql}`);
-    
-    if (!sql.toLowerCase().startsWith('select')) {
-      return c.json({ 
-        error: '无法生成有效的查询语句',
-        success: false,
-      }, 400);
-    }
-
-    const duckdb = getDuckDBService();
-    const conn = await duckdb.getConnection(dbPath);
-    
-    console.log(`[Excel Query] 执行 SQL...`);
-    const result = await duckdb.executeQuery(conn, sql);
-    console.log(`[Excel Query] 查询完成: ${result.rowCount} 行`);
-
-    return c.json({
-      success: true,
-      sql,
-      rows: result.rows,
-      rowCount: result.rowCount,
-    });
 
   } catch (err) {
-    console.error('[Excel Query] 查询失败:', err);
+    logger.error('[Excel Query] 查询失败:', err);
     return c.json({ 
       error: err instanceof Error ? err.message : '查询失败',
       success: false,
     }, 500);
   }
 });
+
+// 流式查询（SSE）
+app.post('/query/stream', async (c) => {
+  const { profileId, question, useCode, history } = await c.req.json();
+  
+  if (!profileId || !question) {
+    return c.json({ error: '缺少参数' }, 400);
+  }
+
+  logger.info(`[Excel Query Stream] 问题: ${question}`);
+
+  return streamSSE(c, async (stream) => {
+    try {
+      // 发送开始事件
+      await stream.writeSSE({ event: 'start', data: JSON.stringify({ question }) });
+
+      // 获取 Profile
+      const profile = await db.query.excelProfiles.findFirst({
+        where: eq(excelProfiles.id, profileId),
+      });
+
+      if (!profile) {
+        await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: 'Profile not found' }) });
+        return;
+      }
+
+      const sheets = profile.sheets as Array<{
+        duckdbTable: string;
+        documentId: string;
+        columns: Array<{ name: string; type: string }>;
+        sheetName: string;
+        rowCount: number;
+      }>;
+
+      const sheet = sheets[0]!;
+      const tableName = sheet.duckdbTable;
+      const columns = sheet.columns;
+
+      // 发送思考事件
+      await stream.writeSSE({ 
+        event: 'thinking', 
+        data: JSON.stringify({ message: '正在分析您的问题...' }) 
+      });
+
+      if (useCode) {
+        // 代码模式
+        await stream.writeSSE({ 
+          event: 'thinking', 
+          data: JSON.stringify({ message: '生成 Python 代码...' }) 
+        });
+
+        const result = await generateCodeTool.execute(
+          { profileId, question },
+          { datasetId: '', datasetIds: [] }
+        );
+
+        if (!result.success) {
+          await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: result.error }) });
+          return;
+        }
+
+        await stream.writeSSE({ 
+          event: 'code', 
+          data: JSON.stringify({ code: result.code }) 
+        });
+
+        await stream.writeSSE({ 
+          event: 'output', 
+          data: JSON.stringify({ output: result.output }) 
+        });
+
+        // 生成解释
+        const explanation = await generateExplanation(question, result.output || '');
+        await stream.writeSSE({ 
+          event: 'explanation', 
+          data: JSON.stringify({ explanation }) 
+        });
+
+      } else {
+        // SQL 模式
+        await stream.writeSSE({ 
+          event: 'thinking', 
+          data: JSON.stringify({ message: '生成 SQL 查询...' }) 
+        });
+
+        const result = await queryExcelTool.execute(
+          { profileId, question },
+          { datasetId: '', datasetIds: [] }
+        );
+
+        if (!result.success) {
+          await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: result.error }) });
+          return;
+        }
+
+        await stream.writeSSE({ 
+          event: 'sql', 
+          data: JSON.stringify({ sql: result.sql }) 
+        });
+
+        await stream.writeSSE({ 
+          event: 'data', 
+          data: JSON.stringify({ 
+            rows: result.rows,
+            rowCount: result.rowCount 
+          }) 
+        });
+
+        // 生成解释
+        const explanation = await generateExplanation(question, result.rows, result.explanation);
+        await stream.writeSSE({ 
+          event: 'explanation', 
+          data: JSON.stringify({ explanation }) 
+        });
+      }
+
+      // 生成推荐问题
+      const suggestions = await generateSuggestions(profileId, sheet, question);
+      await stream.writeSSE({ 
+        event: 'suggestions', 
+        data: JSON.stringify({ suggestions }) 
+      });
+
+      // 完成
+      await stream.writeSSE({ event: 'done', data: JSON.stringify({ success: true }) });
+
+    } catch (err) {
+      logger.error('[Excel Query Stream] 失败:', err);
+      await stream.writeSSE({ 
+        event: 'error', 
+        data: JSON.stringify({ error: err instanceof Error ? err.message : '查询失败' }) 
+      });
+    }
+  });
+});
+
+// 生成推荐问题
+async function generateSuggestions(
+  profileId: string,
+  sheet: { sheetName: string; rowCount: number; columns: Array<{ name: string; type: string }> },
+  lastQuestion: string
+): Promise<string[]> {
+  const llm = new LLMService();
+  
+  const columnsDesc = sheet.columns.map(c => `${c.name}(${c.type})`).join(', ');
+  
+  const prompt = `你是一个数据分析助手。根据以下 Excel 数据和用户刚才的问题，生成 3 个相关的推荐问题。
+
+数据信息：
+- Sheet: ${sheet.sheetName}
+- 行数: ${sheet.rowCount}
+- 列: ${columnsDesc}
+
+用户刚才的问题: ${lastQuestion}
+
+要求：
+1. 问题要与当前数据相关
+2. 问题要有分析价值
+3. 问题要简洁明了
+4. 返回 JSON 数组格式: ["问题1", "问题2", "问题3"]
+
+示例：
+["按区域统计销售额", "哪个产品销量最高", "最近一个月的趋势如何"]
+
+请返回 JSON 数组：`;
+
+  try {
+    const response = await llm.chat({
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    let content = response.content || '';
+    content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    
+    const jsonMatch = content.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (Array.isArray(parsed)) {
+        return parsed.slice(0, 3);
+      }
+    }
+  } catch (err) {
+    logger.error('[Excel Suggestions] 生成失败:', err);
+  }
+
+  return ['按主要维度统计汇总', '找出异常值', '分析时间趋势'];
+}
+
+// 生成解释
+async function generateExplanation(
+  question: string,
+  data: Record<string, unknown>[] | string,
+  sqlExplanation?: string
+): Promise<string> {
+  const llm = new LLMService();
+  
+  const dataStr = typeof data === 'string' ? data : JSON.stringify(data.slice(0, 10));
+  
+  const prompt = `你是一个数据分析专家。根据用户问题和查询结果，生成简洁的分析解释。
+
+用户问题: ${question}
+${sqlExplanation ? `SQL 说明: ${sqlExplanation}` : ''}
+查询结果: ${dataStr}
+
+要求：
+1. 解释要简洁明了（2-3 句话）
+2. 突出关键发现
+3. 提供业务洞察
+4. 使用中文
+
+请返回解释文本：`;
+
+  try {
+    const response = await llm.chat({
+      messages: [{ role: 'user', content: prompt }],
+    });
+    return response.content || '查询完成';
+  } catch (err) {
+    logger.error('[Excel Explanation] 生成失败:', err);
+    return '查询完成';
+  }
+}
 
 // 自动生成透视表
 async function generatePivots(
@@ -538,7 +491,9 @@ async function generatePivots(
       c.name.includes('金额') || c.name.includes('销售额') || c.name.includes('数量')
     )?.name || numericCols[0]!.name;
 
-    console.log(`[Excel Pivot] 生成 ${mainCategory} 汇总...`);
+    logger.info(`[Excel Pivot] 生成 ${mainCategory} 汇总...`);
+    
+    // 使用 CAST 进行类型转换
     const pivot1Sql = `SELECT "${mainCategory}", SUM(CAST("${mainValue}" AS DOUBLE)) as "总计", COUNT(*) as "记录数" FROM "${tableName}" GROUP BY "${mainCategory}" ORDER BY "总计" DESC`;
     const pivot1Result = await getDuckDBService().executeQuery(conn, pivot1Sql);
 
@@ -574,7 +529,7 @@ async function generatePivots(
 
     if (categoricalCols.length > 1) {
       const secondCategory = categoricalCols[1]!.name;
-      console.log(`[Excel Pivot] 生成 ${mainCategory}×${secondCategory} 交叉分析...`);
+      logger.info(`[Excel Pivot] 生成 ${mainCategory}×${secondCategory} 交叉分析...`);
       const pivot2Sql = `SELECT "${mainCategory}", "${secondCategory}", SUM(CAST("${mainValue}" AS DOUBLE)) as "总计" FROM "${tableName}" GROUP BY "${mainCategory}", "${secondCategory}" ORDER BY "${mainCategory}", "总计" DESC`;
       const pivot2Result = await getDuckDBService().executeQuery(conn, pivot2Sql);
 
@@ -616,8 +571,8 @@ async function generatePivots(
     }
 
     if (dateCol) {
-      console.log(`[Excel Pivot] 生成时间趋势...`);
-      const trendSql = `SELECT "${dateCol.name}" as "时间", COUNT(*) as "记录数", SUM(CAST("${mainValue}" AS DOUBLE)) as "总计" FROM "${tableName}" GROUP BY "${dateCol.name}" ORDER BY "时间" LIMIT 30`;
+      logger.info(`[Excel Pivot] 生成时间趋势...`);
+      const trendSql = `SELECT CAST("${dateCol.name}" AS DATE) as "时间", COUNT(*) as "记录数", SUM(CAST("${mainValue}" AS DOUBLE)) as "总计" FROM "${tableName}" GROUP BY "时间" ORDER BY "时间" LIMIT 30`;
       const trendResult = await getDuckDBService().executeQuery(conn, trendSql);
 
       const pivotId3 = crypto.randomUUID();
@@ -698,7 +653,11 @@ ${pivots.map(p => `- ${p.name}: ${p.rowCount} 行`).join('\n')}
 
 请确保报告专业、简洁、有洞察力。`;
 
-  console.log(`[Excel Report] 调用 LLM 生成分析报告...`);
+  logger.info(`[Excel Report] 调用 LLM 生成分析报告...`);
+  
+  const { LLMService } = await import('../llm/llm-service');
+  const llm = new LLMService();
+  
   const llmResponse = await llm.chat({
     messages: [{
       role: 'user',
