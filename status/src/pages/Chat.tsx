@@ -32,6 +32,8 @@ interface Citation {
 
 interface SubAgent { name: string; displayName: string }
 
+interface Attachment { filename: string; text: string }
+
 type MsgPhase = 'idle' | 'thinking' | 'tool' | 'writing' | 'done' | 'error';
 
 interface AgentMsg {
@@ -46,6 +48,24 @@ interface AgentMsg {
   termination?: string;
   phase: MsgPhase;
   followUpQuestions?: string[];
+  attachments?: Attachment[];
+}
+
+interface HistoryItem {
+  role: 'user' | 'assistant';
+  content: string;
+  attachments?: Attachment[];
+}
+
+const ATTACHMENT_HINT = '请在回答时充分参考以上资料，并结合多轮对话上下文，聚焦回答用户当前的问题。';
+
+function attachmentBlock(attachments: Attachment[]): string {
+  const blocks = attachments.map(a => `文件：${a.filename}\n---\n${a.text}`).join('\n\n---\n\n');
+  return `\n\n【用户上传的参考资料】\n${blocks}\n\n${ATTACHMENT_HINT}`;
+}
+
+function augmentContent(content: string, attachments?: Attachment[]): string {
+  return attachments && attachments.length > 0 ? content + attachmentBlock(attachments) : content;
 }
 
 const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/query`;
@@ -140,7 +160,7 @@ function dbToAgentMsg(m: {
   role: string;
   content: string;
   citations: unknown[] | null;
-  meta: { latencyMs?: number; termination?: string; toolCalls?: Array<{ name: string; kind: string }>; followUpQuestions?: string[] } | null;
+  meta: { latencyMs?: number; termination?: string; toolCalls?: Array<{ name: string; kind: string }>; followUpQuestions?: string[]; attachments?: Attachment[] } | null;
 }): AgentMsg {
   const meta = m.meta ?? {};
   const isAssistant = m.role === 'assistant';
@@ -157,6 +177,7 @@ function dbToAgentMsg(m: {
     latencyMs: meta.latencyMs,
     termination: meta.termination,
     followUpQuestions: Array.isArray(meta.followUpQuestions) ? meta.followUpQuestions : [],
+    attachments: Array.isArray(meta.attachments) ? meta.attachments : undefined,
     phase: incomplete ? 'writing' : 'done',
   };
 }
@@ -211,7 +232,9 @@ export default function Chat() {
   const stickToBottomRef = useRef(true);
   const scrollRafRef = useRef<number | null>(null);
   const stoppedByUserRef = useRef(false);
-  const historyRef = useRef<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+  const historyRef = useRef<HistoryItem[]>([]);
+  const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
+  const pendingAttachmentsRef = useRef<Attachment[]>([]);
   const pendingSessionNavRef = useRef<string | null>(null);
   const pendingAssistantRef = useRef<AgentMsg | null>(null);
   const savedAssistantMsgIdRef = useRef<string | null>(null);
@@ -789,6 +812,8 @@ export default function Chat() {
     setSessionId(null);
     setMessages([]);
     historyRef.current = [];
+    pendingAttachmentsRef.current = [];
+    setPendingAttachments([]);
     navigate('/chat');
   }, [loading, navigate, setSessionId]);
 
@@ -807,7 +832,11 @@ export default function Chat() {
       const lastPersistedAssistantId = findLastPersistedAssistantId(loaded);
       setSessionId(id);
       setMessages(loaded);
-      historyRef.current = loaded.map(m => ({ role: m.role, content: m.content }));
+      historyRef.current = loaded.map(m => ({
+        role: m.role,
+        content: m.content,
+        ...(m.attachments && m.attachments.length > 0 ? { attachments: m.attachments } : {}),
+      }));
       if (loaded.length === 0) {
         message.info('该会话暂无已保存的消息');
       }
@@ -842,6 +871,8 @@ export default function Chat() {
         setSessionId(null);
         setMessages([]);
         historyRef.current = [];
+        pendingAttachmentsRef.current = [];
+        setPendingAttachments([]);
       }
       return;
     }
@@ -869,9 +900,38 @@ export default function Chat() {
     }
   }, [activeSessionId, startNewChat, refreshSessions]);
 
+  const attachFile = useCallback(async (file: File) => {
+    if (pendingAttachmentsRef.current.length >= 5) {
+      message.warning('单次最多上传 5 个文件');
+      return;
+    }
+    if (pendingAttachmentsRef.current.some(a => a.filename === file.name)) {
+      message.warning(`已添加同名文件：${file.name}`);
+      return;
+    }
+    const hide = message.loading({ content: `正在解析 ${file.name}…`, key: `attach-${file.name}`, duration: 0 });
+    try {
+      const res = await api.uploadChatAttachment(file);
+      pendingAttachmentsRef.current = [...pendingAttachmentsRef.current, { filename: res.filename, text: res.text }];
+      setPendingAttachments(pendingAttachmentsRef.current);
+      hide();
+      if (res.truncated) message.warning(`${file.name} 内容过长，已截取前 ${res.charCount} 字符`);
+    } catch (e) {
+      hide();
+      message.error(e instanceof Error ? e.message : '文件解析失败');
+    }
+  }, []);
+
+  const removeAttachment = useCallback((filename: string) => {
+    pendingAttachmentsRef.current = pendingAttachmentsRef.current.filter(x => x.filename !== filename);
+    setPendingAttachments(pendingAttachmentsRef.current);
+  }, []);
+
   const send = useCallback(async (q: string) => {
     const text = q.trim();
     if (!text || loading) return;
+
+    const currentAttachments = pendingAttachmentsRef.current;
 
     let sessionId = sessionIdRef.current;
     if (!sessionId) {
@@ -890,7 +950,11 @@ export default function Chat() {
     }
 
     try {
-      await api.addSessionMessage(sessionId, { role: 'user', content: text });
+      await api.addSessionMessage(sessionId, {
+        role: 'user',
+        content: text,
+        ...(currentAttachments.length > 0 ? { meta: { attachments: currentAttachments } } : {}),
+      });
     } catch {
       message.warning('消息保存失败，但仍将继续回答');
     }
@@ -898,6 +962,7 @@ export default function Chat() {
     const userMsg: AgentMsg = {
       id: newId(), role: 'user', content: text,
       thinking: [], toolCalls: [], subAgents: [], citations: [], phase: 'done',
+      ...(currentAttachments.length > 0 ? { attachments: currentAttachments } : {}),
     };
     const botMsg = emptyAssistant();
     pendingAssistantRef.current = botMsg;
@@ -912,7 +977,12 @@ export default function Chat() {
     }
     querySessionIdRef.current = sessionId;
     setMessages(prev => [...prev, userMsg, botMsg]);
-    historyRef.current = [...historyRef.current, { role: 'user', content: text }];
+    historyRef.current = [...historyRef.current, {
+      role: 'user', content: text,
+      ...(currentAttachments.length > 0 ? { attachments: currentAttachments } : {}),
+    }];
+    pendingAttachmentsRef.current = [];
+    setPendingAttachments([]);
     setLoading(true);
     stickToBottomRef.current = true;
     void refreshSessions();
@@ -921,7 +991,14 @@ export default function Chat() {
       type: 'query',
       question: text,
       sessionId,
-      options: { history: historyRef.current.slice(0, -1).slice(-20), topK: 5 },
+      options: {
+        history: historyRef.current
+          .slice(0, -1)
+          .slice(-20)
+          .map(h => ({ role: h.role, content: augmentContent(h.content, h.attachments) })),
+        ...(currentAttachments.length > 0 ? { attachments: currentAttachments } : {}),
+        topK: 5,
+      },
     });
 
     connectWsWithPayload(payload);
@@ -1064,6 +1141,9 @@ export default function Chat() {
               onSend={send}
               onStop={stopGeneration}
               initialQuery={kgNodeInitialQuery ?? undefined}
+              attachments={pendingAttachments}
+              onAttach={attachFile}
+              onRemoveAttachment={removeAttachment}
             />
             <p className="kc-chat-disclaimer">
             以上内容仅供参考，不构成法律意见。具体问题请咨询专业律师。
@@ -1124,9 +1204,21 @@ const MsgBubble = memo(function MsgBubble({
   onFollowUp?: (q: string) => void;
 }) {
   if (msg.role === 'user') {
+    const files = msg.attachments ?? [];
     return (
       <div className="kc-chat-row kc-chat-row-user">
-        <div className="kc-chat-bubble-user">{msg.content}</div>
+        <div className="kc-chat-bubble-user">
+          {msg.content}
+          {files.length > 0 && (
+            <div className="kc-chat-user-attachments">
+              {files.map(f => (
+                <span key={f.filename} className="kc-chat-user-attachment" title={`已作为参考资料：${f.filename}`}>
+                  <PaperClipOutlined /> {f.filename}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="kc-chat-avatar kc-chat-avatar-user"><UserOutlined /></div>
       </div>
     );
@@ -1212,20 +1304,28 @@ const MsgBubble = memo(function MsgBubble({
   );
 }, msgBubbleEqual);
 
+const ACCEPTED_ATTACHMENT_EXTS = '.pdf,.docx,.doc,.txt,.md,.markdown,.csv,.log';
+
 const ChatInputBar = memo(function ChatInputBar({
   loading,
   onSend,
   onStop,
   initialQuery,
+  attachments,
+  onAttach,
+  onRemoveAttachment,
 }: {
   loading: boolean;
   onSend: (text: string) => void;
   onStop: () => void;
   initialQuery?: string;
+  attachments: Attachment[];
+  onAttach: (file: File) => void;
+  onRemoveAttachment: (filename: string) => void;
 }) {
   const [question, setQuestion] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 从图谱跳转来时预填问题
   useEffect(() => {
     if (initialQuery) setQuestion(initialQuery);
   }, [initialQuery]);
@@ -1237,9 +1337,50 @@ const ChatInputBar = memo(function ChatInputBar({
     onSend(text);
   }, [question, loading, onSend]);
 
+  const onFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) void onAttach(file);
+    e.target.value = '';
+  }, [onAttach]);
+
   return (
     <div className="kc-chat-input-inner">
+      {attachments.length > 0 && (
+        <div className="kc-chat-attachments">
+          {attachments.map(a => (
+            <span key={a.filename} className="kc-chat-attachment-chip">
+              <PaperClipOutlined />
+              <span className="kc-chat-attachment-name" title={a.filename}>{a.filename}</span>
+              <button
+                type="button"
+                className="kc-chat-attachment-remove"
+                aria-label={`移除 ${a.filename}`}
+                onClick={() => onRemoveAttachment(a.filename)}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
       <div className="kc-chat-input-row">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={ACCEPTED_ATTACHMENT_EXTS}
+          style={{ display: 'none' }}
+          onChange={onFileChange}
+        />
+        <button
+          type="button"
+          className="kc-chat-clip-btn"
+          aria-label="上传文档"
+          title="上传 PDF / Word / 文本，将作为本次问答的参考资料"
+          disabled={loading || attachments.length >= 5}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <PaperClipOutlined />
+        </button>
         <TextArea
           value={question}
           onChange={e => setQuestion(e.target.value)}

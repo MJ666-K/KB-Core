@@ -21,6 +21,12 @@ function deduplicateCitations(citations: Citation[]): Citation[] {
   return citations.filter(c => { if (seen.has(c.chunkId)) return false; seen.add(c.chunkId); return true; });
 }
 
+function buildUserQueryWithContext(query: string, attachments?: Array<{ filename: string; text: string }>): string {
+  if (!attachments || attachments.length === 0) return query;
+  const blocks = attachments.map(a => `文件：${a.filename}\n---\n${a.text}`).join('\n\n---\n\n');
+  return `${query}\n\n【用户在本轮上传的参考资料】\n${blocks}\n\n请在回答时充分参考以上资料，并结合多轮对话上下文，聚焦回答用户当前的问题。`;
+}
+
 export class QueryAgent {
   constructor(
     private readonly llm: LLMService,
@@ -76,7 +82,7 @@ export class QueryAgent {
     const messages: Message[] = [
       { role: 'system', content: systemPrompt },
       ...(options.history ?? []),
-      { role: 'user', content: query },
+      { role: 'user', content: buildUserQueryWithContext(query, options.attachments) },
     ];
 
     const allToolDefs = [
@@ -331,6 +337,7 @@ export class QueryAgent {
       : [options.datasetId];
     return {
       params, datasetId: effectiveDatasetIds[0] ?? options.datasetId, userId: options.userId, history: options.history,
+      attachments: options.attachments,
       tools: this.toolRegistry, llm: this.llm, hooks: this.hookRegistry, events, datasetIds: effectiveDatasetIds,
       async executeTool(name, toolParams) { return self.executeCallable(name, toolParams, options, events); },
     };

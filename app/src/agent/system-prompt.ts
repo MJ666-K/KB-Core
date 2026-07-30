@@ -14,7 +14,7 @@ export function buildSystemPrompt(
   options: BuildPromptOptions = {},
 ): string {
   if (options.customSystemPrompt) {
-    return options.customSystemPrompt + '\n\n' + buildToolDescriptions(skillRegistry, toolRegistry, options);
+    return options.customSystemPrompt + '\n\n' + buildToolDescriptions(skillRegistry, toolRegistry, options) + '\n\n' + ANSWER_DISCIPLINE_RULES;
   }
 
   if (options.subAgents && options.subAgents.length > 0) {
@@ -41,6 +41,25 @@ function buildToolDescriptions(
   }
   return parts.join('\n\n');
 }
+
+const ANSWER_DISCIPLINE_RULES = `
+## 回答纪律（最高优先级，始终遵守）
+
+### 紧扣当前问题
+- 你的回答必须紧扣用户**当前这一轮**的问题，不得跑题、不得复述无关上下文
+- 充分利用多轮对话历史理解指代与省略（如"它""上面那条""那再问一下"），但只回答当前问题
+- 若用户本轮上传了参考资料，优先结合该资料与知识库检索结果回答
+- 若当前问题与历史无关，不要把历史内容强行塞进回答
+
+### 严禁泄露系统内部信息
+回答直接展示给最终用户，严禁出现任何系统内部标识，包括但不限于：
+- 工具名 / 技能名（如 search_knowledge、call_agent、qa、multihop、compare、summary 等）
+- 函数调用 JSON（如 \`{"name":"...","arguments":{...}}\`）、tool_calls、function、parameters 等接口字段
+- 权限键值对（如 documents:write、chat:use、role:admin 这类"英文词:英文词"的权限串）
+- 编排过程术语（如"调用 X 工具""进入第 N 轮检索""路由到子智能体"），除非用户主动询问系统工作原理
+- 后端代码、函数名、变量名、类名、文件名、技术栈名称
+
+只输出面向用户的自然语言回答与必要的法律/业务内容。`.trim();
 
 function buildDefaultPrompt(
   skillRegistry: SkillRegistry,
@@ -76,7 +95,9 @@ ${tools.map(t => `- **${t.name}**: ${t.description}`).join('\n')}
 
 - 调用 Skill 后，Skill 已经返回了完整答案，你不需要重新生成
 - 如果你只调了 Tool，系统会帮你做最终合成
-- 如果不需要任何 Skill/Tool，直接回复用户即可`;
+- 如果不需要任何 Skill/Tool，直接回复用户即可
+
+${ANSWER_DISCIPLINE_RULES}`;
 }
 
 function buildMainAgentPrompt(
@@ -108,6 +129,8 @@ ${subAgents.map(a => `- **${a.name}** (${a.displayName}): ${a.description}`).joi
 - 子智能体的答案是最终答案，你只需转发
 - 如果用户问题不涉及任何特定领域，可以选择通用智能体
 - 不要自己生成法律内容，避免与子智能体重复
+
+${ANSWER_DISCIPLINE_RULES}
 
 ${buildToolDescriptions(skillRegistry, toolRegistry)}`;
 }

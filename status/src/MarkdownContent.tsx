@@ -18,6 +18,7 @@ import { CopyOutlined, CheckOutlined, LoadingOutlined } from '@ant-design/icons'
 import { message } from 'antd';
 import { normalizeCitationMarkers } from './normalizeCitationMarkers';
 import { sanitizeAnswerContent } from './sanitizeAnswerContent';
+import { mapCodeFences } from './codeFence';
 import { useTheme } from './theme/ThemeContext';
 
 interface Props {
@@ -90,14 +91,31 @@ function loadMermaid(isDark: boolean) {
 /** 修正 LLM 常见 Mermaid 语法问题 */
 function normalizeMermaidSource(source: string): string {
   let s = source.trim();
+  // 引用编号（LLM 偶发误放进流程图，统一清除，避免破坏语法）
   s = s.replace(/\[\d+\]/g, '');
+  // 残留的引用链接尾巴（防御：上游 wrapCitationRefs 已对代码块跳过）
+  s = s.replace(/\(#[A-Za-z0-9_-]+\)/g, '');
+  // markdown 加粗/斜体符号混入节点文字会破坏 mermaid 解析
+  s = s.replace(/\*\*/g, '');
+  // 全角引号 → 半角，避免成对匹配错乱
   s = s.replace(/[""]/g, '"').replace(/['']/g, "'");
-  const firstLine = s.split('\n')[0]?.trim() ?? '';
-  const hasType = /^(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|mindmap|timeline|gitGraph|C4Context)/i.test(firstLine);
+  // 跳过空行/注释行后取首个有效行判断类型
+  const lines = s.split('\n').map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('%%'));
+  const firstLine = lines[0] ?? '';
+  const hasType = /^(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|mindmap|timeline|gitGraph|C4Context|journey|quadrantChart|requirementDiagram|sankey|xychart|block|architecture)/i.test(firstLine);
   if (!hasType && s.length > 0) {
     s = `flowchart TD\n${s}`;
   }
   return s;
+}
+
+/** 解析失败时的二次修复：给含特殊字符的未加引号节点标签补引号 */
+function repairMermaidSource(source: string): string {
+  // A[text with (parens) or, comma]  →  A["text with (parens) or, comma"]
+  return source.replace(
+    /([A-Za-z0-9_]+)\[([^\]"[]*?[(),，。、:：；;!！？?\s][^\]"[]*?)\]/g,
+    (_, id, label) => `${id}["${label.replace(/"/g, "'")}"]`,
+  );
 }
 
 function MermaidPlaceholder({ hint }: { hint: string }) {
@@ -110,7 +128,7 @@ function MermaidPlaceholder({ hint }: { hint: string }) {
 }
 
 function wrapCitationRefs(content: string): string {
-  return content.replace(/\[(\d+)\]/g, '[$1](#cite-$1)');
+  return mapCodeFences(content, t => t.replace(/\[(\d+)\]/g, '[$1](#cite-$1)'));
 }
 
 async function copyText(text: string): Promise<boolean> {
@@ -188,8 +206,15 @@ function MermaidDiagram({ source, streaming }: { source: string; streaming: bool
         const mermaid = await loadMermaid(isDark);
         if (cancelled || !containerRef.current) return;
 
-        await mermaid.parse(normalized);
-        const { svg } = await mermaid.render(renderId, normalized);
+        let diagram = normalized;
+        try {
+          await mermaid.parse(diagram);
+        } catch {
+          // 首次解析失败：尝试自动修复（给含特殊字符的节点标签补引号）后重试一次
+          diagram = repairMermaidSource(normalized);
+          await mermaid.parse(diagram);
+        }
+        const { svg } = await mermaid.render(renderId, diagram);
         if (!cancelled && containerRef.current) {
           containerRef.current.innerHTML = svg;
           setRendering(false);

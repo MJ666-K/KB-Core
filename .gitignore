@@ -6,3 +6,5 @@
 data/*.txt
 app/data/*/*.xlsx
 app/data/*/*.duckdb
+
+test-contracts/*

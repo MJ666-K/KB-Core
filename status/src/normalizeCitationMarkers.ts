@@ -1,5 +1,12 @@
-/** 将误放在段首的 [1] 《法条标题》 调整为标题在前、编号在段末 */
+import { mapCodeFences } from './codeFence';
+
+/** 将误放在段首的 [1] 《法条标题》 调整为标题在前、编号在段末。
+ *  代码块感知：跳过 fenced code block 内部，避免破坏 mermaid / 代码。 */
 export function normalizeCitationMarkers(content: string): string {
+  return mapCodeFences(content, normalizeCitationMarkersProse);
+}
+
+function normalizeCitationMarkersProse(content: string): string {
   const lines = content.split('\n');
   const out: string[] = [];
   let i = 0;

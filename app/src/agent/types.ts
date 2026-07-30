@@ -8,6 +8,7 @@ export interface QueryOptions {
   topK?: number;
   maxIterations?: number;
   history?: Message[];
+  attachments?: Array<{ filename: string; text: string }>;
   agentName?: string;
   model?: string;
   /** 子 Agent 调用时为 false，避免重复生成推荐追问 */

@@ -1,12 +1,18 @@
 import { pgTable, uuid, text, timestamp, jsonb, integer, index } from 'drizzle-orm/pg-core';
 import type { Citation } from './query-log';
 
+export interface ChatMessageAttachment {
+  filename: string;
+  text: string;
+}
+
 export interface ChatMessageMeta {
   latencyMs?: number;
   termination?: string;
   toolCalls?: Array<{ name: string; kind: string }>;
   followUpQuestions?: string[];
   queryJobId?: string;
+  attachments?: ChatMessageAttachment[];
 }
 
 export const chatSessions = pgTable('chat_sessions', {

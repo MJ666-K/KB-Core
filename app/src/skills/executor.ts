@@ -6,6 +6,15 @@ import { logger } from '../utils/logger';
 
 const MAX_SKILL_ITERATIONS = 3;
 
+const SKILL_CONTEXT_USE_NOTE = `## 多轮上下文使用提示
+
+以上对话历史中包含用户之前的提问、你之前的回答，以及用户在历史轮次上传的参考资料（以「【用户上传的参考资料】」标记）。回答当前问题时：
+
+1. **先回顾历史**：当前问题中的「它/上面/那份合同/刚才说的」等指代，要结合历史理解。
+2. **历史/上传资料优先**：若历史或上传资料中已包含直接相关的信息（如用户上传文件里的具体数值、机构、条款），优先据此精确回答，不要忽略已有上下文泛泛而谈、也不要重复检索后才编造。
+3. **知识库检索作为补充**：检索用于补充法律依据；当上传资料/历史已明确给出答案时，应以它们为准并标注来源是「您上传的资料」。
+4. **始终紧扣当前问题**：只回答用户当前这一轮的问题，不要把历史无关内容强塞进来。`;
+
 /**
  * 通用 Skill 执行器。
  * 读取 SKILL.md 的正文作为 LLM 指令，运行 mini Agent Loop 执行。
@@ -33,11 +42,18 @@ export class SkillExecutor {
     logger.info(`[SkillExecutor] 开始执行`, {
       tools: allowedTools.length > 0 ? allowedTools.join(',') : '(none)',
       maxIterations: MAX_SKILL_ITERATIONS,
+      historyLen: (ctx.history ?? []).length,
+      attachments: (ctx.attachments ?? []).length,
     });
 
+    // 注入多轮对话历史 + 当前会话上传的附件，确保 Skill 路径也能聚焦当前问题、
+    // 结合上下文回答（修复「经过 Skill 时历史/附件被完全丢弃导致答非所问」）
+    const userTurnContent = this.buildUserTurnContent(ctx);
+    const hasContext = (ctx.history ?? []).length > 0 || (ctx.attachments ?? []).length > 0;
     const messages: Message[] = [
-      { role: 'system', content: buildSkillSystemPrompt(instructions) },
-      { role: 'user', content: this.formatParams(ctx.params) },
+      { role: 'system', content: buildSkillSystemPrompt(instructions) + (hasContext ? `\n\n${SKILL_CONTEXT_USE_NOTE}` : '') },
+      ...(ctx.history ?? []),
+      { role: 'user', content: userTurnContent },
     ];
 
     const allToolCalls: SkillResult['toolCalls'] = [];
@@ -162,5 +178,13 @@ export class SkillExecutor {
     const entries = Object.entries(params);
     if (entries.length === 0) return '请执行任务。';
     return `请执行任务，参数：\n${entries.map(([k, v]) => `- ${k}: ${JSON.stringify(v)}`).join('\n')}`;
+  }
+
+  private buildUserTurnContent(ctx: SkillContext): string {
+    const base = this.formatParams(ctx.params);
+    const attachments = ctx.attachments ?? [];
+    if (attachments.length === 0) return base;
+    const blocks = attachments.map(a => `文件：${a.filename}\n---\n${a.text}`).join('\n\n---\n\n');
+    return `${base}\n\n【用户在本轮上传的参考资料】\n${blocks}\n\n请在回答时充分参考以上资料，并结合多轮对话上下文，聚焦回答用户当前的问题。`;
   }
 }

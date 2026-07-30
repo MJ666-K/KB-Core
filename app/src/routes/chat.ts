@@ -4,9 +4,12 @@ import type { AuthEnv } from '../auth/middleware';
 import { requirePermission } from '../auth/middleware';
 import { getAgent } from '../agent/registry';
 import type { QueryOptions } from '../agent/types';
+import { parseChatAttachment, isSupportedAttachment } from '../parser/chat-attachment-parser';
 
 const app = new Hono<AuthEnv>();
 app.use('*', requirePermission('chat:use'));
+
+const ATTACHMENT_MAX_SIZE = 20 * 1024 * 1024;
 
 interface ChatRequest {
   question: string;
@@ -97,6 +100,33 @@ app.post('/stream', async (c) => {
       }
     }
   });
+});
+
+app.post('/attachments', async (c) => {
+  const formData = await c.req.formData();
+  const file = formData.get('file');
+  if (!(file instanceof File)) {
+    return c.json({ error: '未提供文件' }, 400);
+  }
+  if (!isSupportedAttachment(file.name)) {
+    return c.json({ error: '暂不支持的文件类型，支持 PDF / Word / 文本' }, 400);
+  }
+  if (file.size > ATTACHMENT_MAX_SIZE) {
+    return c.json({ error: `文件过大（上限 ${ATTACHMENT_MAX_SIZE / 1024 / 1024}MB）` }, 400);
+  }
+
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const parsed = await parseChatAttachment(file.name, buffer);
+    return c.json({
+      filename: parsed.filename,
+      text: parsed.text,
+      truncated: parsed.truncated,
+      charCount: parsed.text.length,
+    });
+  } catch (err) {
+    return c.json({ error: '文件解析失败', detail: err instanceof Error ? err.message : String(err) }, 422);
+  }
 });
 
 export default app;

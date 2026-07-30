@@ -31,6 +31,10 @@ const queryMessageSchema = z.object({
       role: z.enum(['user', 'assistant']),
       content: z.string(),
     })).max(20).optional(),
+    attachments: z.array(z.object({
+      filename: z.string().min(1).max(200),
+      text: z.string().min(1).max(50000),
+    })).max(5).optional(),
   }).optional(),
 });
 
@@ -244,6 +248,7 @@ export const queryWebSocket = {
         topK: body.options?.topK,
         maxIterations: body.options?.maxIterations,
         history,
+        attachments: body.options?.attachments,
       }, wsEvents);
 
       const resultPayload: Record<string, unknown> = { type: 'result', jobId, ...result };

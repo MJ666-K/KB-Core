@@ -79,7 +79,13 @@ export const api = {
       role: 'user' | 'assistant';
       content: string;
       citations: unknown[];
-      meta: { latencyMs?: number; termination?: string; toolCalls?: Array<{ name: string; kind: string }>; followUpQuestions?: string[] };
+      meta: {
+        latencyMs?: number;
+        termination?: string;
+        toolCalls?: Array<{ name: string; kind: string }>;
+        followUpQuestions?: string[];
+        attachments?: Array<{ filename: string; text: string }>;
+      };
       sortOrder: number;
       createdAt: string;
     }>;
@@ -90,17 +96,40 @@ export const api = {
     role: 'user' | 'assistant';
     content: string;
     citations?: unknown[];
-    meta?: { latencyMs?: number; termination?: string; toolCalls?: Array<{ name: string; kind: string }>; followUpQuestions?: string[] };
+    meta?: {
+      latencyMs?: number;
+      termination?: string;
+      toolCalls?: Array<{ name: string; kind: string }>;
+      followUpQuestions?: string[];
+      attachments?: Array<{ filename: string; text: string }>;
+    };
   }) =>
     authFetch(`/api/sessions/${sessionId}/messages`, { method: 'POST', headers, body: JSON.stringify(data) })
       .then(r => r.ok ? r.json() : Promise.reject(new Error('保存消息失败'))),
   updateSessionMessage: (sessionId: string, messageId: string, data: {
     content?: string;
     citations?: unknown[];
-    meta?: { latencyMs?: number; termination?: string; toolCalls?: Array<{ name: string; kind: string }>; followUpQuestions?: string[] };
+    meta?: {
+      latencyMs?: number;
+      termination?: string;
+      toolCalls?: Array<{ name: string; kind: string }>;
+      followUpQuestions?: string[];
+      attachments?: Array<{ filename: string; text: string }>;
+    };
   }) =>
     authFetch(`/api/sessions/${sessionId}/messages/${messageId}`, { method: 'PATCH', headers, body: JSON.stringify(data) })
       .then(r => r.ok ? r.json() : Promise.reject(new Error('更新消息失败'))),
+  uploadChatAttachment: (file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return authFetch('/api/chat/attachments', { method: 'POST', body: fd }).then(async r => {
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({})) as { error?: string; detail?: string };
+        throw new Error(err.detail ?? err.error ?? '文件解析失败');
+      }
+      return r.json() as Promise<{ filename: string; text: string; truncated: boolean; charCount: number }>;
+    });
+  },
   deleteSession: (id: string) =>
     authFetch(`/api/sessions/${id}`, { method: 'DELETE' }).then(r => r.ok ? r.json() : Promise.reject(new Error('删除失败'))),
 
