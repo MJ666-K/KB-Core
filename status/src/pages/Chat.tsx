@@ -5,7 +5,7 @@ import {
 } from 'antd';
 import {
   SendOutlined, PaperClipOutlined, RobotOutlined, UserOutlined, LoadingOutlined,
-  PlusOutlined, DeleteOutlined, MessageOutlined, StopOutlined,
+  PlusOutlined, DeleteOutlined, MessageOutlined, StopOutlined, FileTextOutlined,
 } from '@ant-design/icons';
 import { api } from '../api';
 import { kgApi } from '../api/kgApi';
@@ -1343,44 +1343,37 @@ const ChatInputBar = memo(function ChatInputBar({
     e.target.value = '';
   }, [onAttach]);
 
+  const hasText = question.trim().length > 0;
+
   return (
     <div className="kc-chat-input-inner">
-      {attachments.length > 0 && (
-        <div className="kc-chat-attachments">
-          {attachments.map(a => (
-            <span key={a.filename} className="kc-chat-attachment-chip">
-              <PaperClipOutlined />
-              <span className="kc-chat-attachment-name" title={a.filename}>{a.filename}</span>
-              <button
-                type="button"
-                className="kc-chat-attachment-remove"
-                aria-label={`移除 ${a.filename}`}
-                onClick={() => onRemoveAttachment(a.filename)}
-              >
-                ×
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-      <div className="kc-chat-input-row">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept={ACCEPTED_ATTACHMENT_EXTS}
-          style={{ display: 'none' }}
-          onChange={onFileChange}
-        />
-        <button
-          type="button"
-          className="kc-chat-clip-btn"
-          aria-label="上传文档"
-          title="上传 PDF / Word / 文本，将作为本次问答的参考资料"
-          disabled={loading || attachments.length >= 5}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <PaperClipOutlined />
-        </button>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={ACCEPTED_ATTACHMENT_EXTS}
+        style={{ display: 'none' }}
+        onChange={onFileChange}
+      />
+      <div className={`kc-chat-composer${hasText ? ' kc-chat-composer--active' : ''}`}>
+        {attachments.length > 0 && (
+          <div className="kc-chat-attachments">
+            {attachments.map(a => (
+              <span key={a.filename} className="kc-chat-attachment-chip">
+                <FileTextOutlined className="kc-chat-attachment-icon" />
+                <span className="kc-chat-attachment-name" title={a.filename}>{a.filename}</span>
+                <button
+                  type="button"
+                  className="kc-chat-attachment-remove"
+                  aria-label={`移除 ${a.filename}`}
+                  onClick={() => onRemoveAttachment(a.filename)}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
         <TextArea
           value={question}
           onChange={e => setQuestion(e.target.value)}
@@ -1391,30 +1384,51 @@ const ChatInputBar = memo(function ChatInputBar({
               submit();
             }
           }}
-          placeholder="输入法律问题，Enter 发送，Shift+Enter 换行..."
-          className="kc-chat-input-field"
+          placeholder="输入法律问题…"
+          className="kc-chat-composer-input"
+          variant="borderless"
+          autoSize={{ minRows: 1, maxRows: 6 }}
         />
-        {loading ? (
-          <Button
-            danger
-            type="primary"
-            icon={<StopOutlined />}
-            onClick={onStop}
-            className="kc-chat-stop-btn"
-          >
-            停止
-          </Button>
-        ) : (
-          <Button
-            type="primary"
-            icon={<SendOutlined />}
-            onClick={submit}
-            disabled={!question.trim()}
-            className="kc-chat-send-btn"
-          >
-            发送
-          </Button>
-        )}
+
+        <div className="kc-chat-composer-bar">
+          <div className="kc-chat-composer-left">
+            <button
+              type="button"
+              className="kc-chat-clip-btn"
+              aria-label="上传文档"
+              title="上传 PDF / Word / 文本，作为本次问答的参考资料"
+              disabled={loading || attachments.length >= 5}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <PaperClipOutlined />
+            </button>
+            <span className="kc-chat-composer-hint">Enter 发送 · Shift+Enter 换行</span>
+          </div>
+          <div className="kc-chat-composer-right">
+            {loading ? (
+              <button
+                type="button"
+                className="kc-chat-stop-btn"
+                onClick={onStop}
+                aria-label="停止生成"
+                title="停止生成"
+              >
+                <StopOutlined />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="kc-chat-send-btn"
+                onClick={submit}
+                disabled={!hasText}
+                aria-label="发送"
+                title="发送"
+              >
+                <SendOutlined />
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
