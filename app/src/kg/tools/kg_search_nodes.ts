@@ -1,5 +1,5 @@
 import type { Tool } from '../../tools/types';
-import { withSession, cypherNodeProjection, nodeToPlain } from '../client';
+import { withSessionSafe, cypherNodeProjection, nodeToPlain } from '../client';
 import { logger } from '../../utils/logger';
 import { config } from '../../config';
 import type { KgNode, KgNodeType } from '../client';
@@ -29,7 +29,7 @@ export const kgSearchNodesTool: Tool<Params, Result> = {
   async execute(params: Params) {
     if (!config.kgEnabled) return { nodes: [] };
     const limit = Math.min(Math.max(params.limit ?? 20, 1), 50);
-    return await withSession(async (session) => {
+    return await withSessionSafe({ nodes: [] }, async (session) => {
       // 用全文索引（Neo4j 5.x）：先用全文查 id 集合，再 OPTIONAL MATCH 拿完整属性
       const result = await session.run(
         `

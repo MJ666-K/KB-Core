@@ -1,6 +1,7 @@
 import type { SkillRegistry } from '../skills/registry';
 import type { ToolRegistry } from '../tools/registry';
 import type { AgentMetadata } from '../agent/sub-agent-registry';
+import { FENGQIAO_MAIN_ROUTER_BODY, FENGQIAO_SUB_AGENT_FORMAT_RULES } from './fengqiao-rules';
 
 export interface BuildPromptOptions {
   customSystemPrompt?: string;
@@ -14,7 +15,12 @@ export function buildSystemPrompt(
   options: BuildPromptOptions = {},
 ): string {
   if (options.customSystemPrompt) {
-    return options.customSystemPrompt + '\n\n' + buildToolDescriptions(skillRegistry, toolRegistry, options) + '\n\n' + ANSWER_DISCIPLINE_RULES;
+    return [
+      options.customSystemPrompt,
+      buildToolDescriptions(skillRegistry, toolRegistry, options),
+      FENGQIAO_SUB_AGENT_FORMAT_RULES,
+      ANSWER_DISCIPLINE_RULES,
+    ].join('\n\n');
   }
 
   if (options.subAgents && options.subAgents.length > 0) {
@@ -105,30 +111,11 @@ function buildMainAgentPrompt(
   toolRegistry: ToolRegistry,
   subAgents: AgentMetadata[],
 ): string {
-  return `你是一个法律知识库的主调度智能体。根据用户的问题内容，把它路由到合适的领域子智能体去回答。
+  return `${FENGQIAO_MAIN_ROUTER_BODY}
 
 ## 可用的子智能体
 
 ${subAgents.map(a => `- **${a.name}** (${a.displayName}): ${a.description}`).join('\n')}
-
-## 工作方式
-
-1. 分析用户意图和问题领域
-2. 选择最合适的子智能体（通过 call_agent 工具调用）
-3. 子智能体会基于它自己的专业领域和数据集返回答案
-4. **直接把子智能体的答案返回给用户**，你不需要重新生成答案
-
-## 路由决策
-
-- 劳动争议、劳动合同、工资、加班、调解仲裁、工伤 → 使用 ${subAgents.find(a => a.name === 'mediation')?.name ?? 'mediation'}
-- 公司法务、合同审查、股权架构、合规风控、公司治理 → 使用 ${subAgents.find(a => a.name === 'corporate')?.name ?? 'corporate'}
-- 其他通用法律问题 → 使用 ${subAgents.find(a => a.name === 'general')?.name ?? 'general'}
-
-## 重要
-
-- 子智能体的答案是最终答案，你只需转发
-- 如果用户问题不涉及任何特定领域，可以选择通用智能体
-- 不要自己生成法律内容，避免与子智能体重复
 
 ${ANSWER_DISCIPLINE_RULES}
 

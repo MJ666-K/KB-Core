@@ -1,5 +1,5 @@
 import type { Tool } from '../../tools/types';
-import { withSession, type KgSubgraph, cypherNodeProjection, nodeToPlain, edgeToPlain } from '../client';
+import { withSessionSafe, type KgSubgraph, cypherNodeProjection, nodeToPlain, edgeToPlain } from '../client';
 import { logger } from '../../utils/logger';
 import { config } from '../../config';
 
@@ -29,7 +29,7 @@ export const kgSubgraphTool: Tool<Params, KgSubgraph> = {
   async execute(params: Params): Promise<KgSubgraph> {
     if (!config.kgEnabled) return { nodes: [], edges: [] };
 
-    return await withSession(async (session) => {
+    return await withSessionSafe({ nodes: [], edges: [] }, async (session) => {
       if (params.full) {
         const result = await session.run(`
           MATCH (n)

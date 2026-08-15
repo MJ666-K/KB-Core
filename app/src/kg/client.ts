@@ -45,11 +45,31 @@ export async function withSession<T>(
   fn: (session: Session) => Promise<T>,
   accessMode: 'READ' | 'WRITE' = 'READ',
 ): Promise<T> {
+  if (!config.kgEnabled) {
+    throw new Error('Neo4j is disabled (KG_ENABLED=false)');
+  }
   const session = getNeo4j().session({ defaultAccessMode: neo4j.session[accessMode] });
   try {
-    return await fn(session);
+    const timeoutMs = 8_000;
+    return await Promise.race([
+      fn(session),
+      new Promise<T>((_, reject) => {
+        setTimeout(() => reject(new Error(`Neo4j query timeout (${timeoutMs}ms)`)), timeoutMs);
+      }),
+    ]);
   } finally {
     await session.close();
+  }
+}
+
+/** KG 工具安全包装：Neo4j 不可用时返回 fallback，不阻塞 Agent */
+export async function withSessionSafe<T>(fallback: T, fn: (session: Session) => Promise<T>): Promise<T> {
+  if (!config.kgEnabled) return fallback;
+  try {
+    return await withSession(fn);
+  } catch (err) {
+    log.warn('[kg] session failed, using fallback', { err: err instanceof Error ? err.message : String(err) });
+    return fallback;
   }
 }
 

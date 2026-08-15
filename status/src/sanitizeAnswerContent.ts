@@ -74,6 +74,10 @@ function cleanProse(text: string): string {
   // 5. 编排日志行（整行删除）
   out = out.split('\n').filter(line => !LOG_LINE_PATTERNS.some(re => re.test(line))).join('\n');
 
+  // 6. 知识图谱内部占位符（Skill 误输出时兜底清除）
+  out = out.replace(/\{\{kg:[^}]+\}\}/g, '');
+  out = out.replace(/\{\{chunk:[^}]+\}\}/g, '');
+
   return out;
 }
 

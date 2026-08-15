@@ -2,7 +2,7 @@ import type { Tool } from '../../tools/types';
 import { eq } from 'drizzle-orm';
 import { db } from '../../db/client';
 import { chunks, documents } from '../../db/schema';
-import { withSession } from '../client';
+import { withSessionSafe } from '../client';
 import { logger } from '../../utils/logger';
 import { config } from '../../config';
 
@@ -46,17 +46,19 @@ export const kgToChunkTool: Tool<Params, Result> = {
 
     let nodeLabel: string | null = null;
     let chunkId: string | null = null;
-    await withSession(async (session) => {
+    const kgNode = await withSessionSafe<{ label: string | null; chunkId: string | null } | null>(null, async (session) => {
       const r = await session.run(
         `MATCH (n {id: $id}) RETURN n.label AS label, n.chunkId AS chunkId`,
         { id: params.nodeId },
       );
-      if (r.records.length > 0) {
-        nodeLabel = r.records[0]!.get('label');
-        const cid = r.records[0]!.get('chunkId');
-        chunkId = cid ?? null;
-      }
+      if (r.records.length === 0) return null;
+      const rec = r.records[0]!;
+      return { label: rec.get('label') ?? null, chunkId: rec.get('chunkId') ?? null };
     });
+    if (kgNode) {
+      nodeLabel = kgNode.label;
+      chunkId = kgNode.chunkId;
+    }
     if (!chunkId) {
       logger.info('[kg] kg_to_chunk no chunkId', { nodeId: params.nodeId });
       return { ...empty, nodeLabel };

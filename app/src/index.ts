@@ -57,7 +57,14 @@ async function main(): Promise<void> {
         if (s) agentSkillRegistry.register(s as import('./skills/types').Skill);
       }
     }
-    return new QueryAgent(llm, whitelist ? agentSkillRegistry : skillRegistry, subToolRegistry, hookRegistry, meta.model);
+    return new QueryAgent(
+      llm,
+      whitelist ? agentSkillRegistry : skillRegistry,
+      subToolRegistry,
+      hookRegistry,
+      meta.model,
+      { customSystemPrompt: meta.systemPrompt, skillWhitelist: whitelist },
+    );
   });
   setSubAgentRegistry(subRegistry);
   await subRegistry.reload();

@@ -1,5 +1,5 @@
 import type { Tool } from '../../tools/types';
-import { withSession, type KgNode, type KgEdge, cypherNodeProjection, nodeToPlain } from '../client';
+import { withSessionSafe, type KgNode, type KgEdge, cypherNodeProjection, nodeToPlain } from '../client';
 import { logger } from '../../utils/logger';
 import { config } from '../../config';
 
@@ -40,7 +40,7 @@ export const kgNeighborsTool: Tool<Params, Result> = {
                   : dir === 'in'  ? '(n)<-[r]-(m)'
                   :                  '(n)-[r]-(m)';
 
-    return await withSession(async (session) => {
+    return await withSessionSafe({ nodes: [], edges: [] }, async (session) => {
       const result = await session.run(
         `
         MATCH ${pattern}

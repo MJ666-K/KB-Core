@@ -1,5 +1,5 @@
 import type { Tool } from '../../tools/types';
-import { withSession } from '../client';
+import { withSessionSafe } from '../client';
 import { logger } from '../../utils/logger';
 import { config } from '../../config';
 
@@ -31,7 +31,7 @@ export const kgPathTool: Tool<Params, Result> = {
   async execute(params: Params) {
     if (!config.kgEnabled) return { found: false, length: 0, nodes: [], edges: [] };
     const maxDepth = Math.min(Math.max(params.maxDepth ?? 5, 1), 10);
-    return await withSession(async (session) => {
+    return await withSessionSafe({ found: false, length: 0, nodes: [], edges: [] }, async (session) => {
       const result = await session.run(
         `
         MATCH (a {id: $fromId}), (b {id: $toId})

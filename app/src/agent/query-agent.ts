@@ -8,13 +8,14 @@ import { drainRetrievalDetails } from '../tools/search-knowledge';
 import type { Citation, ToolCallRecord, AgentStep } from '../db/schema';
 import { formatCitations, deduplicateChunks, SYNTHESIS_FINAL_HINT } from '../skills/types';
 import type { RetrievalResult } from '../retrieve/retriever';
-import { buildSystemPrompt } from './system-prompt';
+import { buildSystemPrompt, type BuildPromptOptions } from './system-prompt';
 import type { QueryOptions, QueryResult, EventStream } from './types';
 import type { ModelConfig } from './sub-agent-registry';
 import { db } from '../db/client';
 import { queryLogs, agentTraces } from '../db/schema';
 import { getQuerySettings } from '../settings/effective-config';
 import { logger } from '../utils/logger';
+import { sanitizeUserFacingAnswer } from '../utils/sanitize-answer';
 
 function deduplicateCitations(citations: Citation[]): Citation[] {
   const seen = new Set<string>();
@@ -34,7 +35,12 @@ export class QueryAgent {
     private readonly toolRegistry: ToolRegistry,
     private readonly hookRegistry: HookRegistry,
     private readonly modelConfig?: ModelConfig,
+    private readonly promptOptions: BuildPromptOptions = {},
   ) {}
+
+  private resolveSystemPrompt(): string {
+    return buildSystemPrompt(this.skillRegistry, this.toolRegistry, this.promptOptions);
+  }
 
   private buildModelChatOptions(): Pick<ChatOptions, 'model' | 'apiKey' | 'apiUrl' | 'temperature' | 'maxTokens' | 'topK' | 'topP' | 'frequencyPenalty' | 'presencePenalty'> {
     if (!this.modelConfig) return {};
@@ -52,8 +58,7 @@ export class QueryAgent {
   }
 
   async execute(query: string, options: QueryOptions, events?: EventStream): Promise<QueryResult> {
-    const defaultSystemPrompt = buildSystemPrompt(this.skillRegistry, this.toolRegistry);
-    return this.executeWithSystemPrompt(query, options, defaultSystemPrompt, events);
+    return this.executeWithSystemPrompt(query, options, this.resolveSystemPrompt(), events);
   }
 
   async executeWithSystemPrompt(
@@ -181,9 +186,10 @@ export class QueryAgent {
       }
     }
 
-    const { answer, citations, termination } = await this.resolveFinalAnswer(
+    const { answer: rawAnswer, citations, termination } = await this.resolveFinalAnswer(
       query, messages, skillResults, directRetrievalResults, directAnswer, options, events,
     );
+    const answer = sanitizeUserFacingAnswer(rawAnswer);
     const latencyMs = Date.now() - startTime;
     logger.info(`[Agent] 任务完成`, {
       elapsed: `${latencyMs}ms`,

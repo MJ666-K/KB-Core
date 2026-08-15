@@ -1,5 +1,5 @@
 import type { Tool } from '../../tools/types';
-import { withSession, type KgNode, type KgEdge, cypherNodeProjection, nodeToPlain } from '../client';
+import { withSessionSafe, type KgNode, type KgEdge, cypherNodeProjection, nodeToPlain } from '../client';
 import { logger } from '../../utils/logger';
 import { config } from '../../config';
 
@@ -22,7 +22,7 @@ export const kgGetNodeTool: Tool<Params, Result> = {
   },
   async execute(params: Params) {
     if (!config.kgEnabled) return { node: null, incoming: [], outgoing: [] };
-    return await withSession(async (session) => {
+    return await withSessionSafe({ node: null, incoming: [], outgoing: [] }, async (session) => {
       const nodeRes = await session.run(
         `
         MATCH (n {id: $id})

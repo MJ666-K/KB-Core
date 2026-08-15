@@ -17,14 +17,14 @@ interface ParsedSkill {
 }
 
 const SKILL_DISPLAY_NAMES: Record<string, string> = {
-  chat: '智能回复',
-  qa: '法律问答',
-  search: '法条检索',
-  multihop: '深度分析',
-  compare: '对比分析',
-  summary: '要点总结',
-  followups: '推荐追问',
-  'mediation-advisor': '调解业务问答',
+  chat: '枫桥智诉·智能回复',
+  qa: '枫桥智诉·法律问答',
+  search: '枫桥智诉·法条检索',
+  multihop: '枫桥智诉·复杂案件研判',
+  compare: '枫桥智诉·对比分析',
+  summary: '枫桥智诉·要点总结',
+  followups: '枫桥智诉·推荐追问',
+  'mediation-advisor': '枫桥智诉·调解业务问答',
 };
 
 async function parseSkillMdFile(skillDir: string): Promise<ParsedSkill | null> {
@@ -36,7 +36,7 @@ async function parseSkillMdFile(skillDir: string): Promise<ParsedSkill | null> {
     return null;
   }
 
-  const match = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
   if (!match?.[1]) return null;
 
   const front = parseYaml(match[1]) as {
@@ -75,10 +75,20 @@ export async function seedSkillsFromFiles(): Promise<number> {
       tools: skill.tools,
       parameters: skill.parameters,
       instructions: skill.instructions,
-    }).onConflictDoNothing();
+    }).onConflictDoUpdate({
+      target: skillDefinitions.name,
+      set: {
+        displayName: skill.displayName,
+        description: skill.description,
+        tools: skill.tools,
+        parameters: skill.parameters,
+        instructions: skill.instructions,
+        updatedAt: new Date(),
+      },
+    });
     inserted++;
   }
 
-  logger.info(`[Seed] skills synced from files (${inserted} new)`);
+  logger.info(`[Seed] skills synced from files (${inserted})`);
   return inserted;
 }

@@ -1,5 +1,11 @@
 import type { Permission } from '../../auth/permission-registry';
 import { ALL_PERMISSIONS } from '../../auth/permission-registry';
+import {
+  FENGQIAO_MAIN_ROUTER_BODY,
+  FENGQIAO_MEDIATION_AGENT_PROMPT,
+  FENGQIAO_CORPORATE_AGENT_PROMPT,
+  FENGQIAO_GENERAL_AGENT_PROMPT,
+} from '../../agent/fengqiao-rules';
 
 export interface PresetDataset {
   name: string;
@@ -86,8 +92,8 @@ export const PRESET_AGENTS: PresetAgent[] = [
   {
     name: 'router',
     displayName: '路由智能体',
-    description: '快速判断用户意图，分发到对应的领域专家智能体。',
-    systemPrompt: '你是路由智能体。根据用户问题快速判断应交给哪个领域专家处理，直接调用对应 agent。',
+    description: '枫桥智诉主调度：按民商双轨路由到调解/企业/通用子智能体。',
+    systemPrompt: FENGQIAO_MAIN_ROUTER_BODY,
     modelName: 'qwen-turbo',
     datasetNames: [],
     skillNames: [],
@@ -97,7 +103,7 @@ export const PRESET_AGENTS: PresetAgent[] = [
     name: 'general',
     displayName: '通用法律助手',
     description: '通用法律知识问答，适用于所有非特定领域的法律问题、法条查询、一般法律咨询。',
-    systemPrompt: '你是「通用法律助手」。基于知识库中的法律文档，为用户提供准确的法律问答。回答时精确引用法律名称和条款编号。如果知识库中没有相关内容，诚实说明。',
+    systemPrompt: FENGQIAO_GENERAL_AGENT_PROMPT,
     modelName: 'qwen-max',
     datasetNames: ['default', 'legal'],
     skillNames: [],
@@ -106,21 +112,21 @@ export const PRESET_AGENTS: PresetAgent[] = [
   {
     name: 'mediation',
     displayName: '基层调解助手',
-    description: '专注于劳动争议、调解仲裁、工伤赔偿、工资福利、劳动合同解除等劳动者权益问题。',
-    systemPrompt: '你是「基层调解助手」，专门处理劳动者与用人单位之间的纠纷咨询。重点使用《劳动法》《劳动合同法》《劳动争议调解仲裁法》《社会保险法》等。回答时明确引用法条，给出可操作的调解建议。优先保护劳动者合法权益。',
+    description: '枫桥调解轨：邻里纠纷、婚姻家庭、劳动争议、物业矛盾、工伤赔偿等基层矛盾纠纷化解。',
+    systemPrompt: FENGQIAO_MEDIATION_AGENT_PROMPT,
     modelName: 'deepseek-v4-pro',
-    datasetNames: ['legal'],
-    skillNames: [],
+    datasetNames: ['default', 'legal'],
+    skillNames: ['mediation-advisor', 'compare', 'multihop'],
     personality: '温和、耐心、务实',
   },
   {
     name: 'corporate',
     displayName: '企业法务顾问',
-    description: '专注于公司法务、合同审查、公司治理、股权架构、合规风控等企业端法律问题。',
-    systemPrompt: '你是「企业法务顾问」，为企业提供合规和公司治理方面的法律建议。重点使用《公司法》《民法典》合同编等。回答时关注企业端的合规要求和风险防范，给出具体的操作建议。注意：你的建议不构成正式法律意见。',
+    description: '枫桥企业合规轨：合同审查、股权设计、劳动用工合规、账款催收、公司治理与合规风控。',
+    systemPrompt: FENGQIAO_CORPORATE_AGENT_PROMPT,
     modelName: 'deepseek-v4-pro',
-    datasetNames: ['legal'],
-    skillNames: [],
+    datasetNames: ['default', 'legal'],
+    skillNames: ['multihop', 'compare'],
     personality: '严谨、前瞻、风险导向',
   },
   {
