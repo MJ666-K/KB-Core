@@ -11,7 +11,7 @@ import type { Citation } from '../db/schema';
 import { config } from '../config';
 import { logger } from '../utils/logger';
 import { generateFollowUpQuestions } from '../skills/follow-up';
-import { inferFengqiaoRoute, META_TOOL } from './fengqiao-router';
+import { inferFengqiaoRoute, META_TOOL, isMainDirectAnswer, buildMainDirectAnswer } from './fengqiao-router';
 import { sanitizeUserFacingAnswer } from '../utils/sanitize-answer';
 import type { SkillResult } from '../skills/types';
 import type { ToolCallRecord, AgentStep } from '../db/schema';
@@ -54,6 +54,19 @@ export class MainAgent {
         answer: safeAnswer,
         citations: [],
         steps: [{ iteration: 0, thought: '系统元问题', action: 'direct', params: {}, resultSummary: safeAnswer }],
+        toolCalls: [],
+        latencyMs: 0,
+        queryLogId: '',
+        termination: 'direct',
+      };
+    }
+
+    if (hasSubAgents && isMainDirectAnswer(query)) {
+      const safeAnswer = buildMainDirectAnswer();
+      return {
+        answer: safeAnswer,
+        citations: [],
+        steps: [{ iteration: 0, thought: '主 Agent 直答', action: 'direct', params: {}, resultSummary: safeAnswer.slice(0, 200) }],
         toolCalls: [],
         latencyMs: 0,
         queryLogId: '',
