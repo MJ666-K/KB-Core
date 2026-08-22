@@ -547,7 +547,7 @@ function parsePassedIdsFromReport(): Set<string> {
       const cols = line.split('|').map(s => s.trim());
       if (cols.length < 8) continue;
       const id = cols[1];
-      if (!/^[A-Z]-\d{2}$/.test(id)) continue;
+      if (!id || !/^[A-Z]-\d{2}$/.test(id)) continue;
       if (cols[4] === '✅' && cols[5] === '✅' && cols[6] === '✅') passed.add(id);
     }
   } catch { /* no report yet */ }
@@ -758,7 +758,7 @@ function parseExistingResults(): Map<string, CaseResult> {
       const cols = line.split('|').map(s => s.trim());
       if (cols.length < 10) continue;
       const id = cols[1];
-      if (!/^[A-Z]-\d{2}$/.test(id)) continue;
+      if (!id || !/^[A-Z]-\d{2}$/.test(id)) continue;
       const tc = CASES.find(c => c.id === id);
       if (!tc) continue;
       map.set(id, {
