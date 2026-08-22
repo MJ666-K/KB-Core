@@ -10,7 +10,7 @@ import { logger } from '../utils/logger';
 import { getLastRetrievalDetails } from '../tools/search-knowledge';
 import { resolveBearerToken } from '../auth/service';
 import { hasPermission } from '../auth/permission-registry';
-import { resolveDatasetAccess, accessibleDatasetIds, isSuperadminUser, hasAccessLevel } from '../auth/access';
+import { resolveDatasetAccess, accessibleDatasetIds, canManageAllDatasets, isSuperadminUser, hasAccessLevel } from '../auth/access';
 import {
   createQueryJob,
   appendQueryJobEvent,
@@ -52,7 +52,7 @@ const authMessageSchema = z.object({
   token: z.string().min(1),
 });
 
-type WsData = { userId: string; authenticated: boolean; isSuperadmin: boolean };
+type WsData = { userId: string; authenticated: boolean; isSuperadmin: boolean; canManageAll: boolean };
 
 /**
  * 解析查询目标库（多库 + 行级权限）：
@@ -63,18 +63,18 @@ async function resolveDatasetIds(
   datasetId: string | undefined,
   datasetIds: string[] | undefined,
   userId: string,
-  isSup: boolean,
+  canManageAll: boolean,
 ): Promise<string[] | null> {
   const requested = datasetIds && datasetIds.length > 0 ? datasetIds : (datasetId ? [datasetId] : []);
   if (requested.length === 0) {
-    const accessible = await accessibleDatasetIds(userId, isSup);
+    const accessible = await accessibleDatasetIds(userId, canManageAll);
     return accessible.length > 0 ? accessible.slice(0, 1) : null;
   }
   const verified: string[] = [];
   for (const id of requested) {
     const ds = await db.query.datasets.findFirst({ where: eq(datasets.id, id) });
     if (!ds) continue;
-    const access = await resolveDatasetAccess(ds, userId, isSup);
+    const access = await resolveDatasetAccess(ds, userId, canManageAll);
     if (hasAccessLevel(access, 'read')) verified.push(id);
   }
   return verified.length > 0 ? verified : null;
@@ -93,7 +93,7 @@ async function assertSessionOwner(sessionId: string, userId: string): Promise<bo
 
 export const queryWebSocket = {
   open(ws: ServerWebSocket<WsData>): void {
-    ws.data = { userId: '', authenticated: false, isSuperadmin: false };
+    ws.data = { userId: '', authenticated: false, isSuperadmin: false, canManageAll: false };
   },
 
   async message(ws: ServerWebSocket<WsData>, message: string | Buffer): Promise<void> {
@@ -127,7 +127,7 @@ export const queryWebSocket = {
         ws.close();
         return;
       }
-      ws.data = { userId: user.id, authenticated: true, isSuperadmin: isSuperadminUser(user.role) };
+      ws.data = { userId: user.id, authenticated: true, isSuperadmin: isSuperadminUser(user.role), canManageAll: canManageAllDatasets(user.role, user.permissions) };
       send(ws, { type: 'auth_ok', user: { id: user.id, username: user.username, role: user.role } });
       return;
     }
@@ -180,7 +180,7 @@ export const queryWebSocket = {
       return;
     }
 
-    const datasetIds = await resolveDatasetIds(body.datasetId, body.datasetIds, ws.data.userId, ws.data.isSuperadmin);
+    const datasetIds = await resolveDatasetIds(body.datasetId, body.datasetIds, ws.data.userId, ws.data.canManageAll);
     if (!datasetIds || datasetIds.length === 0) {
       send(ws, { type: 'error', error: 'No accessible dataset' });
       return;

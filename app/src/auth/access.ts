@@ -1,7 +1,7 @@
 import { eq, or, and } from 'drizzle-orm';
 import { db } from '../db/client';
 import { datasets, datasetMembers } from '../db/schema';
-import { SUPERADMIN_ROLE_KEY } from './permission-registry';
+import { SUPERADMIN_ROLE_KEY, hasPermission, type Permission } from './permission-registry';
 
 export type DatasetAccess = 'none' | 'read' | 'write' | 'manage';
 export type AgentAccess = 'none' | 'read' | 'manage';
@@ -25,10 +25,15 @@ export function isSuperadminUser(role: string): boolean {
   return role === SUPERADMIN_ROLE_KEY;
 }
 
+/** 超管 或 拥有 datasets:manage 权限 → 可管理所有库（含公开库编辑/删除/成员管理） */
+export function canManageAllDatasets(role: string, permissions: readonly string[]): boolean {
+  return isSuperadminUser(role) || hasPermission(permissions as Permission[], 'datasets:manage');
+}
+
 /**
  * 库行级访问判定（RBAC 行级所有权 + shared 库 ACL）。
  * 返回 none/read/write/manage。
- *   - superadmin → manage
+ *   - superadmin 或 datasets:manage 持有者 → manage
  *   - owner → manage
  *   - public → read
  *   - shared → 查 dataset_members，viewer→read / editor→write / manager→manage
@@ -37,9 +42,9 @@ export function isSuperadminUser(role: string): boolean {
 export async function resolveDatasetAccess(
   dataset: DatasetAccessRow,
   userId: string,
-  isSuperadmin: boolean,
+  canManageAll: boolean,
 ): Promise<DatasetAccess> {
-  if (isSuperadmin) return 'manage';
+  if (canManageAll) return 'manage';
   if (dataset.ownerId === userId) return 'manage';
   if (dataset.visibility === 'public') return 'read';
   if (dataset.visibility === 'shared') {
@@ -86,10 +91,10 @@ export function agentVisibleToUser(
 
 /**
  * 用户可访问（read 及以上）的所有 datasetId 集合——用于文档列表按权限过滤。
- * superadmin 返回全部；否则 = owner 自己的 + public 的 + shared 中自己是 member 的。
+ * canManageAll（超管/datasets:manage）返回全部；否则 = owner 自己的 + public 的 + shared 中自己是 member 的。
  */
-export async function accessibleDatasetIds(userId: string, isSuperadmin: boolean): Promise<string[]> {
-  if (isSuperadmin) {
+export async function accessibleDatasetIds(userId: string, canManageAll: boolean): Promise<string[]> {
+  if (canManageAll) {
     const all = await db.select({ id: datasets.id }).from(datasets);
     return all.map(r => r.id);
   }

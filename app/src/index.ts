@@ -81,7 +81,7 @@ async function main(): Promise<void> {
     fetch(req, server) {
       const url = new URL(req.url);
       if (url.pathname === WS_QUERY_PATH) {
-        if (server.upgrade(req, { data: { userId: '', authenticated: false, isSuperadmin: false } })) return undefined;
+        if (server.upgrade(req, { data: { userId: '', authenticated: false, isSuperadmin: false, canManageAll: false } })) return undefined;
         return new Response('WebSocket upgrade failed', { status: 400 });
       }
       return app.fetch(req, server);
