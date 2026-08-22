@@ -10,8 +10,8 @@ CREATE TABLE "dataset_members" (
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "dataset_members_dataset_id_user_id_pk" PRIMARY KEY("dataset_id","user_id")
 );--> statement-breakpoint
-ALTER TABLE "agents" DROP CONSTRAINT "agents_name_unique";--> statement-breakpoint
-ALTER TABLE "datasets" DROP CONSTRAINT "datasets_name_unique";--> statement-breakpoint
+ALTER TABLE "agents" DROP CONSTRAINT IF EXISTS "agents_name_unique";--> statement-breakpoint
+ALTER TABLE "datasets" DROP CONSTRAINT IF EXISTS "datasets_name_unique";--> statement-breakpoint
 ALTER TABLE "agents" ADD COLUMN "owner_id" uuid;--> statement-breakpoint
 ALTER TABLE "agents" ADD COLUMN "visibility" "dataset_visibility" DEFAULT 'private' NOT NULL;--> statement-breakpoint
 ALTER TABLE "datasets" ADD COLUMN "owner_id" uuid;--> statement-breakpoint
