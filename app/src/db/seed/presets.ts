@@ -10,6 +10,7 @@ import {
 export interface PresetDataset {
   name: string;
   description?: string;
+  visibility?: 'private' | 'shared' | 'public';
 }
 
 export interface PresetModel {
@@ -42,6 +43,7 @@ export interface PresetAgent {
   datasetNames: string[];
   skillNames: string[];
   personality: string;
+  visibility?: 'private' | 'shared' | 'public';
 }
 
 /** 基础数据集 */
@@ -75,7 +77,7 @@ export const PRESET_ROLES: PresetRole[] = [
     isSystem: true,
     permissions: [
       'dashboard:view', 'chat:use', 'kg:view', 'documents:read', 'documents:write',
-      'agents:manage', 'models:manage', 'skills:manage', 'settings:manage',
+      'datasets:manage', 'agents:manage', 'models:manage', 'skills:manage', 'settings:manage',
     ],
   },
   {
@@ -83,7 +85,7 @@ export const PRESET_ROLES: PresetRole[] = [
     label: '普通用户',
     description: '可使用法律助手，只读浏览文档',
     isSystem: true,
-    permissions: ['chat:use', 'kg:view', 'documents:read'],
+    permissions: ['chat:use', 'kg:view', 'documents:read', 'datasets:read'],
   }
 ];
 

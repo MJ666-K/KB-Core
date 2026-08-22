@@ -16,12 +16,14 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   PartitionOutlined,
+  DatabaseOutlined,
 } from '@ant-design/icons';
 import Dashboard from './pages/Dashboard';
 import Agents from './pages/Agents';
 import Models from './pages/Models';
 import Skills from './pages/Skills';
 import Documents from './pages/Documents';
+import Datasets from './pages/Datasets';
 import DocDetail from './pages/DocDetail';
 import Chat from './pages/Chat';
 import Settings from './pages/Settings';
@@ -55,10 +57,11 @@ const ALL_MENU_ITEMS: Array<{
   permissions: Permission[];
 }> = [
   { key: '/', icon: <DashboardOutlined />, label: '控制台', title: '控制台', subtitle: 'Knowledge Core 数据总览', permissions: [MENU_PERMISSIONS['/']] },
-  { key: '/agents', icon: <RobotOutlined />, label: '智能体', title: '智能体', subtitle: '路由子智能体与领域专家配置', permissions: [MENU_PERMISSIONS['/agents']] },
+  { key: '/agents', icon: <RobotOutlined />, label: '智能体', title: '智能体', subtitle: '路由子智能体与领域专家配置', permissions: ['agents:manage', 'datasets:read', 'datasets:manage'] },
   { key: '/models', icon: <ApiOutlined />, label: '模型', title: '模型', subtitle: 'LLM 模型与推理参数管理', permissions: [MENU_PERMISSIONS['/models']] },
   { key: '/skills', icon: <ToolOutlined />, label: 'Skills', title: 'Skills', subtitle: 'Agent 高级任务单元', permissions: [MENU_PERMISSIONS['/skills']] },
   { key: '/documents', icon: <FileTextOutlined />, label: '文档库', title: '文档库', subtitle: '上传 · 刷新 · 重新嵌入 · 删除', permissions: [MENU_PERMISSIONS['/documents']] },
+  { key: '/datasets', icon: <DatabaseOutlined />, label: '知识库', title: '知识库', subtitle: '私有库 · 切割/召回配置 · 成员共享', permissions: [MENU_PERMISSIONS['/datasets']] },
   { key: '/chat', icon: <MessageOutlined />, label: '法律助手', title: '法律助手', subtitle: CHAT_SUBTITLE, permissions: [MENU_PERMISSIONS['/chat']] },
   { key: '/users', icon: <TeamOutlined />, label: '访问控制', title: '访问控制', subtitle: '用户账号 · 角色 · 权限', permissions: ['users:manage', 'roles:manage'] },
   { key: '/kg', icon: <PartitionOutlined />, label: '知识图谱', title: '知识图谱', subtitle: '图谱可视化与导航', permissions: [MENU_PERMISSIONS['/kg']] },
@@ -252,6 +255,7 @@ export default function App() {
                 <Route path="/skills" element={<Skills />} />
                 <Route path="/documents" element={<Documents />} />
                 <Route path="/documents/:id" element={<DocDetail />} />
+                <Route path="/datasets" element={<Datasets />} />
                 <Route path="/chat" element={<Chat />} />
                 <Route path="/chat/:sessionId" element={<Chat />} />
                 <Route path="/users" element={<Users />} />

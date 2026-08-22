@@ -1,6 +1,9 @@
 import type { Tool, ToolContext } from './types';
 import type { HybridRetriever, RetrievalResult, RetrievalDetails } from '../retrieve/retriever';
-import { getQuerySettings } from '../settings/effective-config';
+import { getQuerySettings, mergeQuery, type QuerySettings } from '../settings/effective-config';
+import { db } from '../db/client';
+import { datasets } from '../db/schema';
+import { eq } from 'drizzle-orm';
 import { logger } from '../utils/logger';
 
 let retrieverInstance: HybridRetriever | null = null;
@@ -159,10 +162,22 @@ export const searchKnowledgeTool: Tool<SearchParams, RetrievalResult[]> = {
       datasetIds: ctx.datasetIds?.length ?? 0,
     });
 
+    // 库级召回配置覆盖：取主库（datasetIds[0] ?? datasetId）的 retrieveConfig
+    const primaryId = ctx.datasetIds?.[0] ?? ctx.datasetId;
+    let cfg: QuerySettings | undefined;
+    if (primaryId) {
+      const ds = await db.query.datasets.findFirst({
+        where: eq(datasets.id, primaryId),
+        columns: { retrieveConfig: true },
+      });
+      cfg = mergeQuery(getQuerySettings(), ds?.retrieveConfig ?? undefined);
+    }
+
     const { results, details } = await retrieverInstance.retrieveWithDetails(normalizedQuery, {
       datasetId: ctx.datasetId,
       datasetIds: ctx.datasetIds,
       topK,
+      cfg,
     });
 
     const detailsWithResults = { ...details, results };
@@ -182,7 +197,7 @@ export const searchKnowledgeTool: Tool<SearchParams, RetrievalResult[]> = {
     }
 
     const elapsed = Date.now() - searchStart;
-    const q = getQuerySettings();
+    const q = cfg ?? getQuerySettings();
     logger.info(`[检索] search_knowledge 完成 (${elapsed}ms)`, {
       query: normalizedQuery.slice(0, 100),
       topK,

@@ -8,7 +8,7 @@ import { ApiReranker, type RerankCandidate, type Reranker } from './reranker';
 import { applyRerankFilter, buildRerankFilterLog, formatRerankFilterDocs } from './filter';
 import { EmbeddingService } from '../embedding/embedding-service';
 import { config } from '../config';
-import { getQuerySettings } from '../settings/effective-config';
+import { getQuerySettings, type QuerySettings } from '../settings/effective-config';
 import { TTLCache } from '../cache/ttl-cache';
 import { logger } from '../utils/logger';
 
@@ -50,6 +50,8 @@ export interface RetrieveOptions {
   datasetId: string;
   datasetIds?: readonly string[];
   topK?: number;
+  /** 库级召回配置覆盖（调用方 mergeQuery 后传入）；缺省回退全局 getQuerySettings() */
+  cfg?: QuerySettings;
 }
 
 export interface RetrieveWithDetailsResult {
@@ -72,7 +74,7 @@ export class HybridRetriever {
   }
 
   async retrieve(query: string, opts: RetrieveOptions): Promise<RetrievalResult[]> {
-    const q = getQuerySettings();
+    const q = opts.cfg ?? getQuerySettings();
     const topK = opts.topK ?? q.searchTopK;
     const idsStr = (opts.datasetIds ?? [opts.datasetId]).join(',');
     const cacheKey = `${idsStr}:${query}:${topK}`;
@@ -82,7 +84,7 @@ export class HybridRetriever {
   }
 
   async retrieveWithDetails(query: string, opts: RetrieveOptions): Promise<RetrieveWithDetailsResult> {
-    const q = getQuerySettings();
+    const q = opts.cfg ?? getQuerySettings();
     const topK = opts.topK ?? q.searchTopK;
     const idsStr = (opts.datasetIds ?? [opts.datasetId]).join(',');
 

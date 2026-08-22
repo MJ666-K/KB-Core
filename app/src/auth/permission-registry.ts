@@ -4,6 +4,8 @@ export type Permission =
   | 'kg:view'
   | 'documents:read'
   | 'documents:write'
+  | 'datasets:read'
+  | 'datasets:manage'
   | 'agents:manage'
   | 'models:manage'
   | 'skills:manage'
@@ -17,6 +19,8 @@ export const ALL_PERMISSIONS: readonly Permission[] = [
   'kg:view',
   'documents:read',
   'documents:write',
+  'datasets:read',
+  'datasets:manage',
   'agents:manage',
   'models:manage',
   'skills:manage',
@@ -31,6 +35,8 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   'kg:view': '知识图谱',
   'documents:read': '文档浏览',
   'documents:write': '文档管理',
+  'datasets:read': '知识库',
+  'datasets:manage': '知识库管理',
   'agents:manage': '智能体管理',
   'models:manage': '模型管理',
   'skills:manage': 'Skills 管理',
@@ -45,6 +51,8 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   'kg:view': '浏览知识图谱、节点详情与关联关系',
   'documents:read': '查看文档库与文档内容',
   'documents:write': '上传、删除与重新嵌入文档',
+  'datasets:read': '创建私有知识库、选库问答与检索、入库到自己有写权限的库',
+  'datasets:manage': '管理任意知识库（含他人库的配置、删除与成员管理）',
   'agents:manage': '配置智能体与路由策略',
   'models:manage': '管理 LLM 模型与推理参数',
   'skills:manage': '管理 Agent Skills 任务单元',
@@ -55,8 +63,8 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
 
 export const PERMISSION_GROUPS: Array<{ key: string; title: string; permissions: Permission[] }> = [
   { key: 'basic', title: '基础功能', permissions: ['dashboard:view', 'chat:use', 'kg:view'] },
-  { key: 'docs', title: '文档', permissions: ['documents:read', 'documents:write'] },
-  { key: 'config', title: '系统配置', permissions: ['agents:manage', 'models:manage', 'skills:manage', 'settings:manage'] },
+  { key: 'docs', title: '文档与知识库', permissions: ['documents:read', 'documents:write', 'datasets:read'] },
+  { key: 'config', title: '系统配置', permissions: ['agents:manage', 'models:manage', 'skills:manage', 'settings:manage', 'datasets:manage'] },
   { key: 'admin', title: '权限管理', permissions: ['users:manage', 'roles:manage'] },
 ];
 

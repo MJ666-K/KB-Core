@@ -6,11 +6,11 @@ import type { Agent, Dataset } from '../types';
 import { datasetDisplayName } from '../datasetLabels';
 import { defaultTablePagination } from '../tablePagination';
 import { useAuth } from '../auth/AuthContext';
-import { canManageAgents } from '../auth/permissions';
+import { canUseAgents } from '../auth/permissions';
 
 export default function Agents() {
   const { user } = useAuth();
-  const canManage = canManageAgents(user?.permissions);
+  const canManage = canUseAgents(user?.permissions);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [models, setModels] = useState<any[]>([]);
@@ -37,6 +37,7 @@ export default function Agents() {
       ...agent,
       modelId: agent.model?.id || agent.modelId || '',
       datasetIds: agent.datasetIds || [],
+      visibility: agent.visibility ?? 'private',
     });
     setModalOpen(true);
   };
@@ -81,6 +82,7 @@ export default function Agents() {
         );
       },
     },
+    { title: '可见性', dataIndex: 'visibility', key: 'visibility', render: (v: string) => <Tag color={v === 'public' ? 'green' : v === 'shared' ? 'blue' : 'default'}>{v === 'public' ? '公开' : v === 'shared' ? '共享' : '私有'}</Tag> },
     { title: '启用', dataIndex: 'enabled', key: 'enabled', render: (v: boolean) => v ? <Tag color="success">启用</Tag> : <Tag>禁用</Tag> },
     {
       title: '操作', key: 'action', width: 160,
@@ -132,9 +134,17 @@ export default function Agents() {
               <Select placeholder="选择模型" showSearch optionFilterProp="label" options={models.map(m => ({ value: m.id, label: `${m.displayName} (${m.modelId})` }))} />
             </Form.Item>
           </div>
-          <Form.Item name="enabled" label="启用" valuePropName="checked" initialValue={true} style={{ marginTop: 12, marginBottom: 0 }}>
-            <Switch checkedChildren="启用" unCheckedChildren="禁用" />
-          </Form.Item>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12 }}>
+            <Form.Item name="visibility" label="可见性" initialValue="private" style={{ margin: 0 }}>
+              <Select options={[
+                { value: 'private', label: '私有（仅创建者）' },
+                { value: 'public', label: '公开（所有人可用）' },
+              ]} />
+            </Form.Item>
+            <Form.Item name="enabled" label="启用" valuePropName="checked" initialValue={true} style={{ margin: 0 }}>
+              <Switch checkedChildren="启用" unCheckedChildren="禁用" />
+            </Form.Item>
+          </div>
         </Form>
       </Modal>
     </div>

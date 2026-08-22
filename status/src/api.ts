@@ -9,6 +9,30 @@ const json = <T>(r: Response): Promise<T> => {
 
 export const api = {
   getDatasets: () => authFetch('/api/datasets').then(json<{ datasets: Dataset[] }>),
+  getDataset: (id: string) => authFetch(`/api/datasets/${id}`).then(json<{ dataset: Dataset; access: string }>),
+  createDataset: (data: {
+    name: string; description?: string; visibility?: 'private' | 'shared' | 'public';
+    chunkConfig?: Record<string, number>; retrieveConfig?: Record<string, number>;
+  }) =>
+    authFetch('/api/datasets', { method: 'POST', headers, body: JSON.stringify(data) })
+      .then(async r => { if (!r.ok) { const e = await r.json().catch(() => ({})) as { error?: string }; throw new Error(e.error ?? '创建失败'); } return r.json(); }),
+  updateDataset: (id: string, data: Record<string, unknown>) =>
+    authFetch(`/api/datasets/${id}`, { method: 'PUT', headers, body: JSON.stringify(data) })
+      .then(async r => { if (!r.ok) { const e = await r.json().catch(() => ({})) as { error?: string }; throw new Error(e.error ?? '更新失败'); } return r.json(); }),
+  deleteDataset: (id: string) =>
+    authFetch(`/api/datasets/${id}`, { method: 'DELETE' })
+      .then(async r => { if (!r.ok) { const e = await r.json().catch(() => ({})) as { error?: string }; throw new Error(e.error ?? '删除失败'); } return r.json(); }),
+  getDatasetMembers: (id: string) =>
+    authFetch(`/api/datasets/${id}/members`).then(json<{ members: Array<{ datasetId: string; userId: string; role: 'viewer' | 'editor' | 'manager'; grantedBy?: string | null; createdAt: string }> }>),
+  addDatasetMember: (id: string, data: { userId: string; role: 'viewer' | 'editor' | 'manager' }) =>
+    authFetch(`/api/datasets/${id}/members`, { method: 'POST', headers, body: JSON.stringify(data) })
+      .then(async r => { if (!r.ok) { const e = await r.json().catch(() => ({})) as { error?: string }; throw new Error(e.error ?? '添加失败'); } return r.json(); }),
+  updateDatasetMember: (id: string, userId: string, role: 'viewer' | 'editor' | 'manager') =>
+    authFetch(`/api/datasets/${id}/members/${userId}`, { method: 'PUT', headers, body: JSON.stringify({ role }) })
+      .then(async r => { if (!r.ok) { const e = await r.json().catch(() => ({})) as { error?: string }; throw new Error(e.error ?? '更新失败'); } return r.json(); }),
+  removeDatasetMember: (id: string, userId: string) =>
+    authFetch(`/api/datasets/${id}/members/${userId}`, { method: 'DELETE' })
+      .then(async r => { if (!r.ok) { const e = await r.json().catch(() => ({})) as { error?: string }; throw new Error(e.error ?? '移除失败'); } return r.json(); }),
   getStats: () => authFetch('/api/stats').then(json<{
     documentCount: number;
     chunkCount: number;

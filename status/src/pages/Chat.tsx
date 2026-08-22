@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, memo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
-  Input, Button, Card, Typography, Popconfirm, message, Spin, Collapse,
+  Input, Button, Card, Typography, Popconfirm, message, Spin, Collapse, Select,
 } from 'antd';
 import {
   SendOutlined, PaperClipOutlined, RobotOutlined, UserOutlined, LoadingOutlined,
@@ -18,6 +18,7 @@ import {
 } from '../chatSessions';
 import { buildChatHints, CHAT_INTRO } from '../chatHints';
 import { getAuthToken } from '../auth/storage';
+import type { Dataset } from '../types';
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -193,6 +194,8 @@ export default function Chat() {
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [hints, setHints] = useState<string[]>(HINTS_FALLBACK);
   const [kgNodeInitialQuery, setKgNodeInitialQuery] = useState<string | null>(null);
+  const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [selectedDatasetIds, setSelectedDatasetIds] = useState<string[]>([]);
 
   // 处理 ?kgNode=xxx 入参：从图谱跳到 Chat 时预填问题
   const [searchParams, setSearchParams] = useSearchParams();
@@ -220,6 +223,21 @@ export default function Chat() {
       });
     return () => { cancelled = true; };
   }, [searchParams, setSearchParams]);
+
+  // 加载用户可访问的知识库（多选检索范围，默认选第一个）
+  useEffect(() => {
+    let cancelled = false;
+    api.getDatasets().then(res => {
+      if (cancelled) return;
+      setDatasets(res.datasets);
+      setSelectedDatasetIds(prev => {
+        if (prev.length > 0) return prev;
+        const first = res.datasets[0];
+        return first ? [first.id] : [];
+      });
+    }).catch(() => { /* ignore */ });
+    return () => { cancelled = true; };
+  }, []);
 
   const wsRef = useRef<WebSocket | null>(null);
   const assistantIdRef = useRef<string | null>(null);
@@ -991,6 +1009,7 @@ export default function Chat() {
       type: 'query',
       question: text,
       sessionId,
+      datasetIds: selectedDatasetIds,
       options: {
         history: historyRef.current
           .slice(0, -1)
@@ -1002,7 +1021,7 @@ export default function Chat() {
     });
 
     connectWsWithPayload(payload);
-  }, [loading, connectWsWithPayload, refreshSessions, navigate, setSessionId]);
+  }, [loading, connectWsWithPayload, refreshSessions, navigate, setSessionId, selectedDatasetIds]);
 
   const stopGeneration = useCallback(() => {
     if (!loading || finishedRef.current) return;
@@ -1135,6 +1154,20 @@ export default function Chat() {
           </div>
 
           <div className="kc-chat-input-bar">
+            {datasets.length > 0 && (
+              <Select
+                mode="multiple"
+                maxTagCount="responsive"
+                placeholder="选择检索的知识库（可多选，调用所选库的智能体）"
+                value={selectedDatasetIds}
+                onChange={setSelectedDatasetIds}
+                style={{ width: '100%', marginBottom: 8 }}
+                options={datasets.map(d => ({
+                  value: d.id,
+                  label: `${d.name}（${d.visibility === 'private' ? '私有' : d.visibility === 'shared' ? '共享' : '公开'}）`,
+                }))}
+              />
+            )}
             <ChatInputBar
               key={activeSessionId ?? 'draft'}
               loading={loading}

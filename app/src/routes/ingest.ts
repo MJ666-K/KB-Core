@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { AuthEnv } from '../auth/middleware';
-import { requirePermission } from '../auth/middleware';
+import { requirePermission, getAuthUser } from '../auth/middleware';
+import { resolveDatasetAccess, isSuperadminUser, hasAccessLevel } from '../auth/access';
 import { z } from 'zod';
 import { nanoid } from 'nanoid';
 import { extname } from 'path';
@@ -22,22 +23,41 @@ const datasetNameSchema = z.string().min(1).max(100).regex(
   'Dataset name can only contain letters, numbers, Chinese, hyphens and underscores',
 );
 
+/** 解析入库目标库（多租户）：优先按 uuid(id) 查；否则按 (owner,name) 查/建。返回库或 null */
+async function resolveIngestDataset(
+  datasetRaw: unknown,
+  userId: string,
+): Promise<typeof datasets.$inferSelect | null> {
+  // 优先按 uuid（dataset id）查 + 行级校验由调用方做
+  const asUuid = z.string().uuid().safeParse(datasetRaw);
+  if (asUuid.success) {
+    const found = await db.query.datasets.findFirst({ where: eq(datasets.id, asUuid.data) });
+    return found ?? null;
+  }
+  // 否则按 (owner, name) 查/建（传 name 时建为 owner 的私有库）
+  const asName = datasetNameSchema.safeParse(datasetRaw);
+  if (asName.success) {
+    const found = await db.query.datasets.findFirst({
+      where: and(eq(datasets.name, asName.data), eq(datasets.ownerId, userId)),
+    });
+    if (found) return found;
+    const [d] = await db.insert(datasets).values({
+      name: asName.data, ownerId: userId, visibility: 'private',
+    }).returning();
+    return d ?? null;
+  }
+  const found = await db.query.datasets.findFirst({
+    where: eq(datasets.id, String(datasetRaw)),
+  });
+  return found ?? null;
+}
+
 app.post('/ingest', requirePermission('documents:write'), async (c) => {
   const formData = await c.req.formData();
   const file = formData.get('file');
   const datasetRaw = formData.get('dataset') ?? formData.get('datasetId') ?? 'default';
 
   if (!(file instanceof File)) return c.json({ error: 'No file provided' }, 400);
-
-  let datasetName: string;
-  const asName = datasetNameSchema.safeParse(datasetRaw);
-  if (asName.success) {
-    datasetName = asName.data;
-  } else {
-    const ds = await db.query.datasets.findFirst({ where: eq(datasets.id, String(datasetRaw)) });
-    if (!ds) return c.json({ error: 'Invalid dataset' }, 400);
-    datasetName = ds.name;
-  }
 
   if (file.size > MAX_FILE_SIZE) return c.json({ error: `File too large (max ${MAX_FILE_SIZE / 1024 / 1024}MB)` }, 400);
 
@@ -46,11 +66,17 @@ app.post('/ingest', requirePermission('documents:write'), async (c) => {
   const safeName = `${Date.now()}-${nanoid(10)}${safeExt}`;
   const title = file.name.replace(/\.[^.]+$/, '');
 
-  let dataset = await db.query.datasets.findFirst({ where: eq(datasets.name, datasetName) });
-  if (!dataset) {
-    const [d] = await db.insert(datasets).values({ name: datasetName }).returning();
-    dataset = d!;
+  // 解析目标库（多租户）：name 按 (owner,name) 查/建；id 按 id 查
+  const user = getAuthUser(c);
+  const sup = isSuperadminUser(user.role);
+  const dataset = await resolveIngestDataset(datasetRaw, user.id);
+  if (!dataset) return c.json({ error: 'Invalid dataset' }, 400);
+  // 行级 write 校验
+  const access = await resolveDatasetAccess(dataset, user.id, sup);
+  if (!hasAccessLevel(access, 'write')) {
+    return c.json({ error: 'Forbidden', detail: '对该库无写入权限' }, 403);
   }
+  const datasetName = dataset.name;
 
   const buffer = await file.arrayBuffer();
   const fhash = hashBuffer(buffer);
@@ -111,6 +137,8 @@ app.post('/ingest', requirePermission('documents:write'), async (c) => {
     fileHash: fhash,
     fileSize: file.size,
     status: 'pending',
+    scope: dataset.visibility,
+    ownerId: user.id,
   }).returning();
 
   await enqueueIngest(doc!.id, sourcePath, dataset.id);
