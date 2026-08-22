@@ -93,7 +93,7 @@ export function canWriteDocuments(userPermissions: readonly string[] | undefined
 }
 
 export function canUseDatasets(userPermissions: readonly string[] | undefined): boolean {
-  return hasPermission(userPermissions, 'datasets:read');
+  return hasAnyPermission(userPermissions, ['datasets:read', 'datasets:manage']);
 }
 
 export function canManageDatasets(userPermissions: readonly string[] | undefined): boolean {
