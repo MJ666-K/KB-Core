@@ -20,7 +20,8 @@ import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import { db, pool } from '../db/client';
-import { chunks, datasets, documents } from '../db/schema';
+import { chunks, datasets, documents, users } from '../db/schema';
+import { SUPERADMIN_ROLE_KEY } from '../auth/permission-registry';
 import { ensureKgReady, withSession, closeNeo4j } from './client';
 import { logger as log } from '../utils/logger';
 
@@ -104,10 +105,15 @@ async function ensureKgDataset(name: string): Promise<IngestContext> {
     }
     return { datasetName: name, datasetUuid: row.id, neo4jDatasetId };
   }
+  // kg 库为系统级 public，owner 取超管
+  const owner = await db.query.users.findFirst({ where: eq(users.role, SUPERADMIN_ROLE_KEY) });
+  if (!owner) throw new Error('superadmin not found; run seed before kg ingest');
   const inserted = await db.insert(datasets).values({
     name,
     kind: 'kg',
     description: '知识图谱数据集（kg-data.json 入库）',
+    ownerId: owner.id,
+    visibility: 'public',
   }).returning({ id: datasets.id });
   const row = inserted[0]!;
   return { datasetName: name, datasetUuid: row.id, neo4jDatasetId };

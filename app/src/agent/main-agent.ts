@@ -9,6 +9,7 @@ import type { QueryOptions, QueryResult, EventStream } from './types';
 import type { ModelConfig } from './sub-agent-registry';
 import type { Citation } from '../db/schema';
 import { config } from '../config';
+import { agentVisibleToUser } from '../auth/access';
 import { logger } from '../utils/logger';
 import { generateFollowUpQuestions } from '../skills/follow-up';
 import { inferFengqiaoRoute, META_TOOL, isMainDirectAnswer, buildMainDirectAnswer } from './fengqiao-router';
@@ -43,7 +44,20 @@ export class MainAgent {
   }
 
   async execute(query: string, options: QueryOptions, events?: EventStream): Promise<QueryResult> {
-    const subAgents = getSubAgentRegistry().listMetadata();
+    // 可用智能体：服务所选库 且 用户可见（owner/public/超管）
+    const allSub = getSubAgentRegistry().listMetadata();
+    const selected = options.datasetIds?.length
+      ? [...options.datasetIds]
+      : (options.datasetId ? [options.datasetId] : []);
+    const isSup = options.isSuperadmin ?? false;
+    const userId = options.userId ?? '';
+    const subAgents = selected.length === 0
+      ? allSub
+      : allSub.filter(a =>
+          a.enabled &&
+          a.datasetIds.some(id => selected.includes(id)) &&
+          agentVisibleToUser(a, userId, isSup),
+        );
     const hasSubAgents = subAgents.length > 0;
 
     const ruleRoute = hasSubAgents ? inferFengqiaoRoute(query) : null;

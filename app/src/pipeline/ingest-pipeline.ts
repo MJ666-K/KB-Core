@@ -1,14 +1,14 @@
 import { db } from '../db/client';
-import { chunks, documents, ingestJobs } from '../db/schema';
+import { chunks, documents, ingestJobs, datasets } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { TxtParser } from '../parser/txt-parser';
-import { createSplitter } from '../splitter';
+import { createSplitterWithConfig } from '../splitter';
 import { EmbeddingService } from '../embedding/embedding-service';
 import { logger } from '../utils/logger';
 import { sha256 } from '../utils/hash';
 import { sql } from 'drizzle-orm';
 import { config } from '../config';
-import { getChunkSettings } from '../settings/effective-config';
+import { getChunkSettings, mergeChunk } from '../settings/effective-config';
 
 const parser = new TxtParser();
 const embeddingService = new EmbeddingService();
@@ -31,6 +31,10 @@ export async function ingestDocument(docId: string, sourcePath: string, datasetI
     // 幂等：Worker 开始前再清一次，避免重复任务残留旧 chunks
     await db.delete(chunks).where(eq(chunks.documentId, docId));
 
+    // 库级配置覆盖 + scope（多租户：scope = 库 visibility，替代硬编码 'platform'）
+    const ds = await db.query.datasets.findFirst({ where: eq(datasets.id, datasetId) });
+    const dsScope = ds?.visibility ?? 'platform';
+
     await updateDocStatus(docId, 'parsing');
     await recordJob(docId, 'parse', 'running');
     logger.info(`[Ingest] Parse start doc=${docId}`);
@@ -46,9 +50,9 @@ export async function ingestDocument(docId: string, sourcePath: string, datasetI
 
     await updateDocStatus(docId, 'chunking');
     await recordJob(docId, 'chunk', 'running');
-    const chunkSettings = getChunkSettings();
+    const chunkSettings = mergeChunk(getChunkSettings(), ds?.chunkConfig ?? undefined);
     logger.info(`[Ingest] Chunk start doc=${docId}`, chunkSettings);
-    const units = createSplitter().split(doc.content, { docType: doc.docType, title: doc.title });
+    const units = createSplitterWithConfig(chunkSettings.parentTokens, chunkSettings.childTokens, chunkSettings.overlapTokens).split(doc.content, { docType: doc.docType, title: doc.title });
     const parentUnits = units.filter(u => u.isParent);
     const childUnits = units.filter(u => !u.isParent);
 
@@ -69,7 +73,7 @@ export async function ingestDocument(docId: string, sourcePath: string, datasetI
         parentChunkIndex: u.parentChunkIndex, childIndexWithinParent: null, chunkIndex: idx,
         content: u.text, contentHash: u.contentHash, tokenCount: u.tokenCount,
         startOffset: u.startOffset, endOffset: u.endOffset,
-        scope: 'platform', datasetId,
+        scope: dsScope, datasetId,
       })),
     ).returning({ id: chunks.id, parentChunkIndex: chunks.parentChunkIndex });
 
@@ -84,7 +88,7 @@ export async function ingestDocument(docId: string, sourcePath: string, datasetI
         chunkIndex: u.parentChunkIndex * 1000 + (u.childIndexWithinParent ?? 0),
         content: u.text, contentHash: u.contentHash, tokenCount: u.tokenCount,
         startOffset: u.startOffset, endOffset: u.endOffset,
-        scope: 'platform', datasetId,
+        scope: dsScope, datasetId,
       })),
     ).returning({ id: chunks.id });
 

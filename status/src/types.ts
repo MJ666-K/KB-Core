@@ -1,8 +1,37 @@
+export interface DatasetChunkConfig {
+  parentTokens?: number;
+  childTokens?: number;
+  overlapTokens?: number;
+}
+
+export interface DatasetRetrieveConfig {
+  searchTopK?: number;
+  denseTopKMultiplier?: number;
+  rrfK?: number;
+  rerankTopK?: number;
+  denseMinSimilarity?: number;
+  rerankMinScore?: number;
+}
+
+export interface DatasetMember {
+  datasetId: string;
+  userId: string;
+  role: 'viewer' | 'editor' | 'manager';
+  grantedBy?: string | null;
+  createdAt: string;
+}
+
 export interface Dataset {
   id: string;
   name: string;
-  description?: string;
-  created_at: string;
+  description?: string | null;
+  kind: 'document' | 'kg';
+  ownerId: string;
+  visibility: 'private' | 'shared' | 'public';
+  chunkConfig?: Partial<DatasetChunkConfig> | null;
+  retrieveConfig?: Partial<DatasetRetrieveConfig> | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Chunk {
@@ -30,6 +59,8 @@ export interface Agent {
   model: { id: string; name: string; displayName: string; provider: string; modelId: string; } | null;
   skillNames: string[];
   enabled: boolean;
+  ownerId: string;
+  visibility: 'private' | 'shared' | 'public';
 }
 
 export interface Model {

@@ -1,8 +1,9 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../client';
-import { agents, datasets, models, rolePermissions, roles } from '../schema';
+import { agents, datasets, models, rolePermissions, roles, users } from '../schema';
 import { seedSuperAdmin } from '../../auth/service';
 import { invalidateRoleCache } from '../../auth/role-service';
+import { SUPERADMIN_ROLE_KEY } from '../../auth/permission-registry';
 import { logger } from '../../utils/logger';
 import {
   PRESET_AGENTS,
@@ -12,13 +13,26 @@ import {
 } from './presets';
 import { seedSkillsFromFiles } from './skills';
 
-/** 幂等写入基础数据集 */
+/** 查询系统超管 id（预设库/智能体的默认 owner） */
+async function findSuperAdminId(): Promise<string | null> {
+  const owner = await db.query.users.findFirst({ where: eq(users.role, SUPERADMIN_ROLE_KEY) });
+  return owner?.id ?? null;
+}
+
+/** 幂等写入基础数据集（owner=超管，visibility 来自 preset，默认 public） */
 export async function seedDatasets(): Promise<void> {
+  const ownerId = await findSuperAdminId();
+  if (!ownerId) {
+    logger.warn('[Seed] superadmin not found, skipping datasets (run seedSuperAdmin first)');
+    return;
+  }
   for (const preset of PRESET_DATASETS) {
     await db.insert(datasets).values({
       name: preset.name,
       description: preset.description,
-    }).onConflictDoNothing();
+      ownerId,
+      visibility: preset.visibility ?? 'public',
+    }).onConflictDoNothing({ target: [datasets.ownerId, datasets.name] });
   }
   logger.info(`[Seed] datasets ensured (${PRESET_DATASETS.length})`);
 }
@@ -101,9 +115,17 @@ export async function ensurePresetRolePermissions(): Promise<void> {
   if (added > 0) invalidateRoleCache();
 }
 
-/** 幂等写入预设智能体 */
+/** 幂等写入预设智能体（owner=超管，visibility 默认 public） */
 export async function seedAgents(): Promise<void> {
-  const allDs = await db.select({ id: datasets.id, name: datasets.name }).from(datasets);
+  const ownerId = await findSuperAdminId();
+  if (!ownerId) {
+    logger.warn('[Seed] superadmin not found, skipping agents');
+    return;
+  }
+  // 仅查超管名下的库（name 在该 owner 下唯一）
+  const allDs = await db.select({ id: datasets.id, name: datasets.name })
+    .from(datasets)
+    .where(eq(datasets.ownerId, ownerId));
   const dsByName = new Map(allDs.map(d => [d.name, d.id]));
   const modelsList = await db.select({ id: models.id, name: models.name }).from(models);
   const modelByName = new Map(modelsList.map(m => [m.name, m.id]));
@@ -129,8 +151,10 @@ export async function seedAgents(): Promise<void> {
       datasetIds,
       skillNames: a.skillNames,
       personality: a.personality,
+      ownerId,
+      visibility: a.visibility ?? 'public',
     }).onConflictDoUpdate({
-      target: agents.name,
+      target: [agents.ownerId, agents.name],
       set: {
         displayName: a.displayName,
         description: a.description,
@@ -139,6 +163,7 @@ export async function seedAgents(): Promise<void> {
         datasetIds,
         skillNames: a.skillNames,
         personality: a.personality,
+        visibility: a.visibility ?? 'public',
         updatedAt: new Date(),
       },
     });
@@ -151,14 +176,16 @@ export async function seedAgents(): Promise<void> {
 /**
  * 启动时基础数据初始化（与 Drizzle schema 迁移分离）
  * 可重复执行，幂等补全缺失项
+ *
+ * 顺序：先建角色 → 补权限 → 建超管 → 建库/智能体（需 owner）
  */
 export async function runBaseSeed(): Promise<void> {
   logger.info('[Seed] Running base data seed...');
-  await seedDatasets();
-  await seedModels();
   await seedPresetRoles();
   await ensurePresetRolePermissions();
   await seedSuperAdmin();
+  await seedDatasets();
+  await seedModels();
   await seedSkillsFromFiles();
   await seedAgents();
   logger.info('[Seed] Base data seed complete');

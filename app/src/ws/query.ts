@@ -10,6 +10,7 @@ import { logger } from '../utils/logger';
 import { getLastRetrievalDetails } from '../tools/search-knowledge';
 import { resolveBearerToken } from '../auth/service';
 import { hasPermission } from '../auth/permission-registry';
+import { resolveDatasetAccess, accessibleDatasetIds, isSuperadminUser, hasAccessLevel } from '../auth/access';
 import {
   createQueryJob,
   appendQueryJobEvent,
@@ -24,6 +25,7 @@ const queryMessageSchema = z.object({
   question: z.string().min(1).max(2000),
   sessionId: z.string().uuid(),
   datasetId: z.string().uuid().optional(),
+  datasetIds: z.array(z.string().uuid()).max(10).optional(),
   options: z.object({
     topK: z.number().int().min(1).max(50).optional(),
     maxIterations: z.number().int().min(1).max(10).optional(),
@@ -50,18 +52,32 @@ const authMessageSchema = z.object({
   token: z.string().min(1),
 });
 
-type WsData = { userId: string; authenticated: boolean };
+type WsData = { userId: string; authenticated: boolean; isSuperadmin: boolean };
 
-let cachedDefaultDatasetId: string | null = null;
-
-async function resolveDatasetId(datasetId?: string): Promise<string | null> {
-  if (datasetId) return datasetId;
-  if (!cachedDefaultDatasetId) {
-    const ds = await db.query.datasets.findFirst({ where: eq(datasets.name, 'default') });
-    if (!ds) return null;
-    cachedDefaultDatasetId = ds.id;
+/**
+ * 解析查询目标库（多库 + 行级权限）：
+ * - 指定 datasetIds/datasetId：校验每个库 read 权限，剔除无权的
+ * - 未指定：回退用户可访问的第一个库（不回退全局 default，避免越权）
+ */
+async function resolveDatasetIds(
+  datasetId: string | undefined,
+  datasetIds: string[] | undefined,
+  userId: string,
+  isSup: boolean,
+): Promise<string[] | null> {
+  const requested = datasetIds && datasetIds.length > 0 ? datasetIds : (datasetId ? [datasetId] : []);
+  if (requested.length === 0) {
+    const accessible = await accessibleDatasetIds(userId, isSup);
+    return accessible.length > 0 ? accessible.slice(0, 1) : null;
   }
-  return cachedDefaultDatasetId;
+  const verified: string[] = [];
+  for (const id of requested) {
+    const ds = await db.query.datasets.findFirst({ where: eq(datasets.id, id) });
+    if (!ds) continue;
+    const access = await resolveDatasetAccess(ds, userId, isSup);
+    if (hasAccessLevel(access, 'read')) verified.push(id);
+  }
+  return verified.length > 0 ? verified : null;
 }
 
 function send(ws: ServerWebSocket<WsData>, payload: unknown): void {
@@ -77,7 +93,7 @@ async function assertSessionOwner(sessionId: string, userId: string): Promise<bo
 
 export const queryWebSocket = {
   open(ws: ServerWebSocket<WsData>): void {
-    ws.data = { userId: '', authenticated: false };
+    ws.data = { userId: '', authenticated: false, isSuperadmin: false };
   },
 
   async message(ws: ServerWebSocket<WsData>, message: string | Buffer): Promise<void> {
@@ -111,7 +127,7 @@ export const queryWebSocket = {
         ws.close();
         return;
       }
-      ws.data = { userId: user.id, authenticated: true };
+      ws.data = { userId: user.id, authenticated: true, isSuperadmin: isSuperadminUser(user.role) };
       send(ws, { type: 'auth_ok', user: { id: user.id, username: user.username, role: user.role } });
       return;
     }
@@ -164,9 +180,14 @@ export const queryWebSocket = {
       return;
     }
 
-    const datasetId = await resolveDatasetId(body.datasetId);
+    const datasetIds = await resolveDatasetIds(body.datasetId, body.datasetIds, ws.data.userId, ws.data.isSuperadmin);
+    if (!datasetIds || datasetIds.length === 0) {
+      send(ws, { type: 'error', error: 'No accessible dataset' });
+      return;
+    }
+    const datasetId = datasetIds[0];
     if (!datasetId) {
-      send(ws, { type: 'error', error: 'Default dataset not found' });
+      send(ws, { type: 'error', error: 'No accessible dataset' });
       return;
     }
 
@@ -245,6 +266,9 @@ export const queryWebSocket = {
 
       const result = await agent.execute(body.question, {
         datasetId,
+        datasetIds,
+        userId: ws.data.userId,
+        isSuperadmin: ws.data.isSuperadmin,
         topK: body.options?.topK,
         maxIterations: body.options?.maxIterations,
         history,
@@ -264,6 +288,7 @@ export const queryWebSocket = {
 
       void agent.generateFollowUpSuggestions(body.question, result, {
         datasetId,
+        datasetIds,
         topK: body.options?.topK,
         maxIterations: body.options?.maxIterations,
         history,

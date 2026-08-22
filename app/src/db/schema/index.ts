@@ -1,4 +1,6 @@
-export { datasets, datasetKindEnum } from './dataset';
+export { datasets, datasetKindEnum, datasetVisibilityEnum } from './dataset';
+export type { DatasetChunkConfig, DatasetRetrieveConfig } from './dataset';
+export { datasetMembers, datasetMemberRoleEnum } from './dataset-member';
 export { documents, documentStatusEnum } from './document';
 export { chunks, embeddingStatusEnum } from './chunk';
 export { ingestJobs, ingestStageEnum, ingestStatusEnum } from './ingest-job';

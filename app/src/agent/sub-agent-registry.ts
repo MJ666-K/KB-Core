@@ -32,6 +32,8 @@ export interface AgentMetadata {
   skillNames: string[];
   personality: string | null;
   enabled: boolean;
+  ownerId: string;
+  visibility: 'private' | 'shared' | 'public';
 }
 
 export interface SubAgentInstance {
@@ -103,6 +105,8 @@ export class SubAgentRegistry {
         skillNames: agentRow.skillNames ?? [],
         personality: agentRow.personality ?? null,
         enabled: agentRow.enabled,
+        ownerId: agentRow.ownerId,
+        visibility: agentRow.visibility,
       };
       try {
         const agent = this.factory(meta);

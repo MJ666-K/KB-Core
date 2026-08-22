@@ -211,7 +211,7 @@ export default function Documents() {
       setUploadIndex(index);
       setFileList(prev => prev.map(pf => pf.uid === f.uid ? { ...pf, status: 'uploading' } : pf));
       try {
-        await api.uploadDocument(f.originFileObj as File, ds?.name ?? 'default');
+        await api.uploadDocument(f.originFileObj as File, ds?.id);
         success++;
         setFileList(prev => prev.map(pf => pf.uid === f.uid ? { ...pf, status: 'done' } : pf));
       } catch {

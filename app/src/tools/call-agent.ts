@@ -48,12 +48,22 @@ export const callAgentTool: Tool<CallAgentParams, SkillResult | { error: string 
     }
 
     const { metadata, agent } = instance;
-    const datasetIds = metadata.datasetIds ?? [];
-    const primaryDatasetId = datasetIds[0] ?? '';
-
+    const configured = metadata.datasetIds ?? [];
+    // 交集：用户选的库 ∩ 智能体配置的库（确保只检索用户授权范围）
+    const selected = ctx.datasetIds ?? [];
+    const datasetIds = selected.length
+      ? selected.filter(id => configured.includes(id))
+      : configured;
+    if (datasetIds.length === 0) {
+      logger.warn(`[call_agent] 智能体 ${params.agent_name} 的服务库与所选库无交集`, {
+        configured: configured.map(id => id.slice(0, 8)),
+        selected: selected.map(id => id.slice(0, 8)),
+      });
+      return { error: `Agent "${params.agent_name}" 的服务库与所选库无交集` };
+    }
+    const primaryDatasetId = datasetIds[0];
     if (!primaryDatasetId) {
-      logger.warn(`[call_agent] 智能体 ${params.agent_name} 没有配置数据集`);
-      return { error: `Agent "${params.agent_name}" has no configured datasets` };
+      return { error: `Agent "${params.agent_name}" has no resolved datasets` };
     }
 
     logger.info(`[call_agent] 路由到子智能体`, {

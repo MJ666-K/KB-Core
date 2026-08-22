@@ -5,6 +5,7 @@ export interface QueryOptions {
   datasetId: string;
   datasetIds?: readonly string[];
   userId?: string;
+  isSuperadmin?: boolean;
   topK?: number;
   maxIterations?: number;
   history?: Message[];
