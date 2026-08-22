@@ -2,11 +2,11 @@ import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { eq, and, inArray } from 'drizzle-orm';
 import type { AuthEnv } from '../auth/middleware';
-import { requireAnyPermission, requirePermission, getAuthUser } from '../auth/middleware';
+import { requireAnyPermission, getAuthUser } from '../auth/middleware';
 import { db } from '../db/client';
 import { datasets, datasetMembers } from '../db/schema';
 import {
-  resolveDatasetAccess, accessibleDatasetIds, isSuperadminUser, hasAccessLevel,
+  resolveDatasetAccess, accessibleDatasetIds, canManageAllDatasets, hasAccessLevel,
 } from '../auth/access';
 
 const app = new Hono<AuthEnv>();
@@ -15,8 +15,8 @@ const app = new Hono<AuthEnv>();
 const canListDatasets = requireAnyPermission(
   'datasets:read', 'documents:read', 'documents:write', 'agents:manage', 'settings:manage',
 );
-// 库 CRUD/成员：需 datasets:read（owner 对自己库天然 manage，由行级校验把关）
-const canUseDatasets = requirePermission('datasets:read');
+// 库 CRUD/成员：需 datasets:read 或 datasets:manage（owner 对自己库天然 manage，由行级校验把关）
+const canUseDatasets = requireAnyPermission('datasets:read', 'datasets:manage');
 
 const nameSchema = z.string().min(1).max(100).regex(/^[a-zA-Z0-9\u4e00-\u9fff_-]+$/);
 const visibilitySchema = z.enum(['private', 'shared', 'public']);
@@ -65,7 +65,7 @@ async function loadDatasetFor(c: Context<AuthEnv>, required: 'read' | 'manage') 
   const ds = await db.query.datasets.findFirst({ where: eq(datasets.id, id) });
   if (!ds) return { response: c.json({ error: 'Dataset not found' }, 404) };
   const user = getAuthUser(c);
-  const access = await resolveDatasetAccess(ds, user.id, isSuperadminUser(user.role));
+  const access = await resolveDatasetAccess(ds, user.id, canManageAllDatasets(user.role, user.permissions));
   if (!hasAccessLevel(access, required)) {
     return { response: c.json({ error: 'Forbidden', detail: `需要 ${required} 权限` }, 403) };
   }
@@ -75,7 +75,7 @@ async function loadDatasetFor(c: Context<AuthEnv>, required: 'read' | 'manage') 
 /** 列出用户可访问的库（owner 自己的 + shared 成员 + public；超管全部） */
 app.get('/', canListDatasets, async (c) => {
   const user = getAuthUser(c);
-  const sup = isSuperadminUser(user.role);
+  const sup = canManageAllDatasets(user.role, user.permissions);
   let rows;
   if (sup) {
     rows = await db.select().from(datasets);

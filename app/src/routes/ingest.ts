@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { AuthEnv } from '../auth/middleware';
 import { requirePermission, getAuthUser } from '../auth/middleware';
-import { resolveDatasetAccess, isSuperadminUser, hasAccessLevel } from '../auth/access';
+import { resolveDatasetAccess, canManageAllDatasets, hasAccessLevel } from '../auth/access';
 import { z } from 'zod';
 import { nanoid } from 'nanoid';
 import { extname } from 'path';
@@ -68,7 +68,7 @@ app.post('/ingest', requirePermission('documents:write'), async (c) => {
 
   // 解析目标库（多租户）：name 按 (owner,name) 查/建；id 按 id 查
   const user = getAuthUser(c);
-  const sup = isSuperadminUser(user.role);
+  const sup = canManageAllDatasets(user.role, user.permissions);
   const dataset = await resolveIngestDataset(datasetRaw, user.id);
   if (!dataset) return c.json({ error: 'Invalid dataset' }, 400);
   // 行级 write 校验

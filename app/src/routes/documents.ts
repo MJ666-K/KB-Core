@@ -7,14 +7,14 @@ import { eq, and, isNull, desc, sql, inArray } from 'drizzle-orm';
 import { readDocumentText, isKgSourcePath } from '../storage/document-storage';
 import { normalizeDocumentContent } from '../utils/text-normalize';
 import { resetDocumentForReingest, enqueueIngest } from '../pipeline/document-reset';
-import { resolveDatasetAccess, accessibleDatasetIds, isSuperadminUser, hasAccessLevel } from '../auth/access';
+import { resolveDatasetAccess, accessibleDatasetIds, canManageAllDatasets, hasAccessLevel } from '../auth/access';
 import { logger } from '../utils/logger';
 
 const app = new Hono<AuthEnv>();
 
 app.get('/', requirePermission('documents:read'), async (c) => {
   const user = getAuthUser(c);
-  const sup = isSuperadminUser(user.role);
+  const sup = canManageAllDatasets(user.role, user.permissions);
   const accessibleIds = sup ? null : await accessibleDatasetIds(user.id, sup);
   const datasetId = c.req.query('datasetId');
   // 指定了 datasetId 但用户无权访问 → 返回空
@@ -68,7 +68,7 @@ async function loadDocForAccess(c: Context<AuthEnv>, id: string, required: 'read
   const ds = await db.query.datasets.findFirst({ where: eq(datasetsSchema.id, doc.datasetId) });
   if (!ds) return { response: c.json({ error: 'Dataset not found' }, 404) };
   const user = getAuthUser(c);
-  const access = await resolveDatasetAccess(ds, user.id, isSuperadminUser(user.role));
+  const access = await resolveDatasetAccess(ds, user.id, canManageAllDatasets(user.role, user.permissions));
   if (!hasAccessLevel(access, required)) {
     return { response: c.json({ error: 'Forbidden', detail: `需要 ${required} 权限` }, 403) };
   }
