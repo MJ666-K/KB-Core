@@ -77,7 +77,7 @@ export const PRESET_ROLES: PresetRole[] = [
     isSystem: true,
     permissions: [
       'dashboard:view', 'chat:use', 'kg:view', 'documents:read', 'documents:write',
-      'datasets:manage', 'agents:manage', 'models:manage', 'skills:manage', 'settings:manage',
+      'datasets:read', 'datasets:manage', 'agents:manage', 'models:manage', 'skills:manage', 'settings:manage',
     ],
   },
   {

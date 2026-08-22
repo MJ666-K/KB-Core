@@ -92,11 +92,10 @@ export async function seedPresetRoles(): Promise<void> {
   logger.info(`[Seed] roles ensured (${PRESET_ROLES.length}, created ${created})`);
 }
 
-/** 为已存在的内置角色补全缺失的预设权限（只增不删，不覆盖用户自定义；superadmin 除外） */
+/** 为已存在的内置角色补全缺失的预设权限（只增不删，不覆盖用户自定义） */
 export async function ensurePresetRolePermissions(): Promise<void> {
   let added = 0;
   for (const preset of PRESET_ROLES) {
-    if (preset.key === 'superadmin') continue;
     const existing = await db.query.roles.findFirst({ where: eq(roles.key, preset.key) });
     if (!existing) continue;
 
